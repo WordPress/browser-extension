@@ -2,46 +2,46 @@
 <html lang="en">
 <head>
 	<meta charset="UTF-8">
-	<title>WordPress Browser Extension — Options</title>
+	<title data-i18n="options_page_title">WordPress Browser Extension — Options</title>
 	<link rel="stylesheet" href="options.css">
 </head>
 <body>
 	<main class="wpd-options">
 		<header class="wpd-options__header">
-			<h1>WordPress Browser Extension</h1>
-			<p class="wpd-options__subtitle">Browser-wide defaults. Per-site choices still live in the toolbar popup.</p>
+			<h1 data-i18n="options_heading">WordPress Browser Extension</h1>
+			<p class="wpd-options__subtitle" data-i18n="options_subtitle">Browser-wide defaults. Per-site choices still live in the toolbar popup.</p>
 		</header>
 
 		<section class="wpd-options__section">
-			<h2>Admin bar</h2>
+			<h2 data-i18n="options_admin_bar_section">Admin bar</h2>
 			<label class="wpd-option">
 				<input type="checkbox" id="adminBarHiddenDefault">
 				<span class="wpd-option__label">
-					<span class="wpd-option__title">Hide admin bar by default</span>
-					<span class="wpd-option__hint">When enabled, the admin bar starts hidden on new WordPress sites. Per-site preferences in the popup still take precedence.</span>
+					<span class="wpd-option__title" data-i18n="options_hide_admin_bar_label">Hide admin bar by default</span>
+					<span class="wpd-option__hint" data-i18n="options_hide_admin_bar_hint">When enabled, the admin bar starts hidden on new WordPress sites. Per-site preferences in the popup still take precedence.</span>
 				</span>
 			</label>
 		</section>
 
 		<section class="wpd-options__section">
-			<h2>Experimental</h2>
+			<h2 data-i18n="options_experimental_section">Experimental</h2>
 			<label class="wpd-option">
 				<input type="checkbox" id="siteInfoEnabled">
 				<span class="wpd-option__label">
-					<span class="wpd-option__title">Show site information panel</span>
-					<span class="wpd-option__hint">Adds a panel to the popup that surfaces the active theme, installed plugins, site name, and REST namespaces. Detection is heuristic — asset-path inference can produce duplicates and false positives (for example mu-plugins and drop-ins). Off by default.</span>
+					<span class="wpd-option__title" data-i18n="options_site_info_label">Show site information panel</span>
+					<span class="wpd-option__hint" data-i18n="options_site_info_hint">Adds a panel to the popup that surfaces the active theme, installed plugins, site name, and REST namespaces. Detection is heuristic — asset-path inference can produce duplicates and false positives (for example mu-plugins and drop-ins). Off by default.</span>
 				</span>
 			</label>
 		</section>
 
 		<section class="wpd-options__section">
-			<h2>Data</h2>
+			<h2 data-i18n="options_data_section">Data</h2>
 			<div class="wpd-option wpd-option--action">
 				<div class="wpd-option__label">
-					<span class="wpd-option__title">Reset extension data</span>
-					<span class="wpd-option__hint">Clears every saved per-site preference, the global defaults set on this page, and the cached "is this a WordPress site" results. Useful for testing or starting fresh.</span>
+					<span class="wpd-option__title" data-i18n="options_reset_label">Reset extension data</span>
+					<span class="wpd-option__hint" data-i18n="options_reset_hint">Clears every saved per-site preference, the global defaults on this page, and the cached "is this a WordPress site" results. Useful for testing or starting fresh.</span>
 				</div>
-				<button type="button" id="resetData" class="wpd-button">Clear all data</button>
+				<button type="button" id="resetData" class="wpd-button" data-i18n="options_clear_button">Clear all data</button>
 			</div>
 			<p id="resetStatus" class="wpd-options__status" role="status" aria-live="polite"></p>
 		</section>

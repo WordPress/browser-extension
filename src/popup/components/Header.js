@@ -62,7 +62,7 @@ export function Header({
 					{updateCount > 0 && (
 						<StatusBadge
 							icon={update}
-							label={`${updateCount} ${updateCount === 1 ? 'update' : 'updates'}`}
+							label={chrome.i18n.getMessage(updateCount === 1 ? 'update_singular' : 'update_plural', [String(updateCount)]) /* "1 update" / "N updates" */}
 							intent="medium"
 							onClick={() => onOpen?.(`${origin}/wp-admin/update-core.php`)}
 						/>
@@ -70,7 +70,7 @@ export function Header({
 					{commentCount > 0 && (
 						<StatusBadge
 							icon={postComments}
-							label={`${commentCount} pending ${commentCount === 1 ? 'comment' : 'comments'}`}
+							label={chrome.i18n.getMessage(commentCount === 1 ? 'pending_comment_singular' : 'pending_comment_plural', [String(commentCount)]) /* "1 pending comment" / "N pending comments" */}
 							intent="informational"
 							onClick={() =>
 								onOpen?.(`${origin}/wp-admin/edit-comments.php?comment_status=moderated`)

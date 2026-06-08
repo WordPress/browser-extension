@@ -10,8 +10,8 @@ export function NotWordPressView({ hostname }) {
 				<EmptyState.Visual>
 					<EmptyState.Icon icon={info} />
 				</EmptyState.Visual>
-				<EmptyState.Title>Not a WordPress site</EmptyState.Title>
-				<EmptyState.Description>No signals detected.</EmptyState.Description>
+				<EmptyState.Title>{chrome.i18n.getMessage('not_wordpress_title') /* "Not a WordPress site" */}</EmptyState.Title>
+				<EmptyState.Description>{chrome.i18n.getMessage('not_wordpress_description') /* "No signals detected." */}</EmptyState.Description>
 			</EmptyState.Root>
 		</>
 	);

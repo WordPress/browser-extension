@@ -9,7 +9,7 @@ import { Button, Icon } from '@wordpress/ui';
 export function InlineConfirm({
 	icon,
 	label,
-	confirmLabel = 'Confirm',
+	confirmLabel = chrome.i18n.getMessage('confirm_label'), // "Confirm"
 	onConfirm,
 	revealMs = 10000,
 	destructive = false,

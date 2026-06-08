@@ -1,0 +1,395 @@
+{
+  "ext_name": {
+    "message": "WordPress Browser Extension",
+    "description": "Extension name shown in browser UI"
+  },
+  "ext_short_name": {
+    "message": "WordPress",
+    "description": "Short name shown where space is limited"
+  },
+  "ext_description": {
+    "message": "Detect WordPress sites, jump to the editor, identify the host, toggle the admin bar, and more.",
+    "description": "Extension description shown in the browser's extension store and management pages"
+  },
+  "ext_action_title": {
+    "message": "WordPress Browser Extension",
+    "description": "Tooltip for the toolbar icon button"
+  },
+  "cmd_edit_this_page": {
+    "message": "Edit this page in WordPress",
+    "description": "Description for the keyboard shortcut command"
+  },
+
+  "options_page_title": {
+    "message": "WordPress Browser Extension — Options",
+    "description": "HTML page title for the options page"
+  },
+  "options_heading": {
+    "message": "WordPress Browser Extension",
+    "description": "H1 heading on the options page"
+  },
+  "options_subtitle": {
+    "message": "Browser-wide defaults. Per-site choices still live in the toolbar popup.",
+    "description": "Subtitle under the options page heading"
+  },
+  "options_admin_bar_section": {
+    "message": "Admin bar",
+    "description": "Section heading for admin bar settings"
+  },
+  "options_hide_admin_bar_label": {
+    "message": "Hide admin bar by default",
+    "description": "Toggle label for the hide-admin-bar option"
+  },
+  "options_hide_admin_bar_hint": {
+    "message": "When enabled, the admin bar starts hidden on new WordPress sites. Per-site preferences in the popup still take precedence.",
+    "description": "Hint text describing the hide-admin-bar toggle behavior"
+  },
+  "options_experimental_section": {
+    "message": "Experimental",
+    "description": "Section heading for experimental features"
+  },
+  "options_site_info_label": {
+    "message": "Show site information panel",
+    "description": "Toggle label for the site information panel option"
+  },
+  "options_site_info_hint": {
+    "message": "Adds a panel to the popup that surfaces the active theme, installed plugins, site name, and REST namespaces. Detection is heuristic — asset-path inference can produce duplicates and false positives (for example mu-plugins and drop-ins). Off by default.",
+    "description": "Hint text describing the site information panel feature"
+  },
+  "options_data_section": {
+    "message": "Data",
+    "description": "Section heading for data management settings"
+  },
+  "options_reset_label": {
+    "message": "Reset extension data",
+    "description": "Label for the reset/clear data option"
+  },
+  "options_reset_hint": {
+    "message": "Clears every saved per-site preference, the global defaults on this page, and the cached \"is this a WordPress site\" results. Useful for testing or starting fresh.",
+    "description": "Hint text describing what the reset action clears"
+  },
+  "options_clear_button": {
+    "message": "Clear all data",
+    "description": "Button label to trigger clearing all extension data"
+  },
+  "options_clear_confirm": {
+    "message": "Clear all extension data?\n\nThis removes every saved per-site preference, the global defaults on this page, and the cached WordPress detection results. Cannot be undone.",
+    "description": "Confirmation dialog text shown before clearing all data"
+  },
+  "options_cleared_success": {
+    "message": "Cleared.",
+    "description": "Status message shown after successfully clearing extension data"
+  },
+  "options_cleared_error": {
+    "message": "Could not clear data. Try again.",
+    "description": "Status message shown when clearing extension data fails"
+  },
+
+  "toolbar_title_detected": {
+    "message": "WordPress detected",
+    "description": "Toolbar icon tooltip when a WordPress site is detected but the user is not logged in"
+  },
+  "toolbar_title_detected_logged_in": {
+    "message": "WordPress detected — logged in",
+    "description": "Toolbar icon tooltip when a WordPress site is detected and the user is logged in"
+  },
+  "toolbar_title_default": {
+    "message": "WordPress Browser Extension",
+    "description": "Default toolbar icon tooltip when no WordPress site is detected"
+  },
+  "admin_bar_hidden_notice": {
+    "message": "[WordPress Browser Extension] Admin bar hidden on this site. Toggle \"Show Admin Bar\" in the extension popup or the options page.",
+    "description": "Console info message shown when the admin bar is hidden on a site"
+  },
+
+  "error_view_title": {
+    "message": "Something went wrong",
+    "description": "Title shown in the popup error state"
+  },
+  "error_view_description": {
+    "message": "Check the service-worker logs.",
+    "description": "Description shown in the popup error state"
+  },
+  "not_supported_title": {
+    "message": "Nothing to inspect here",
+    "description": "Title shown when the current tab cannot be inspected (e.g. new tab, browser pages)"
+  },
+  "not_supported_description": {
+    "message": "Open a website to get started.",
+    "description": "Description shown when the current tab cannot be inspected"
+  },
+  "not_wordpress_title": {
+    "message": "Not a WordPress site",
+    "description": "Title shown when the current site is not detected as WordPress"
+  },
+  "not_wordpress_description": {
+    "message": "No signals detected.",
+    "description": "Description shown when the current site is not detected as WordPress"
+  },
+
+  "verb_view": {
+    "message": "View",
+    "description": "Verb prefix for viewing a published post/page from the WP admin edit screen"
+  },
+  "verb_preview": {
+    "message": "Preview",
+    "description": "Verb prefix for previewing a draft post/page from the WP admin edit screen"
+  },
+  "visit_site": {
+    "message": "Visit Site",
+    "description": "Button label to visit the WordPress site's frontend"
+  },
+  "wordpress_admin": {
+    "message": "WordPress Admin",
+    "description": "Button label to open the WordPress admin dashboard"
+  },
+  "log_in": {
+    "message": "Log In",
+    "description": "Button label to log into a WordPress site"
+  },
+  "log_in_return": {
+    "message": "Log In, Return to Page",
+    "description": "Button label to log in and return to the current page"
+  },
+  "show_admin_bar": {
+    "message": "Show Admin Bar",
+    "description": "Toggle label to show/hide the WordPress admin bar"
+  },
+  "admin_bar_disabled_info": {
+    "message": "Admin bar appears to be disabled by your profile or theme, which limits this extension.",
+    "description": "Info text shown when the admin bar cannot be toggled due to profile or theme settings"
+  },
+  "check_profile_link": {
+    "message": "Check profile →",
+    "description": "Link text directing users to their WordPress profile settings"
+  },
+
+  "copy_url_label": {
+    "message": "Copy URL",
+    "description": "Aria-label and tooltip for the copy URL button"
+  },
+  "copied_label": {
+    "message": "Copied",
+    "description": "Aria-label and tooltip for the copy URL button after the URL has been copied"
+  },
+  "open_new_tab_label": {
+    "message": "Open in new tab",
+    "description": "Aria-label and tooltip for the open-in-new-tab button"
+  },
+
+  "account_menu_label": {
+    "message": "Account menu",
+    "description": "Aria-label for the user account menu button when no display name is available"
+  },
+  "account_menu_for_user": {
+    "message": "Account menu for $NAME$",
+    "description": "Aria-label for the user account menu button when a display name is available",
+    "placeholders": {
+      "name": { "content": "$1" }
+    }
+  },
+  "profile_menu_item": {
+    "message": "Profile",
+    "description": "Menu item linking to the user's WordPress profile"
+  },
+  "gravatar_menu_item": {
+    "message": "Gravatar",
+    "description": "Menu item linking to the user's Gravatar profile"
+  },
+  "log_out_button": {
+    "message": "Log Out",
+    "description": "Button label to log out of the WordPress site"
+  },
+  "confirm_click_button": {
+    "message": "Click again to confirm",
+    "description": "Button label shown after first click on a destructive action, prompting a second confirmation click"
+  },
+  "super_admin_role": {
+    "message": "Super Admin",
+    "description": "Role badge label for WordPress multisite super administrators"
+  },
+
+  "new_content_label": {
+    "message": "New",
+    "description": "Section label for the 'New content' action group in the popup"
+  },
+
+  "dev_tools_label": {
+    "message": "Developer Tools",
+    "description": "Section label for the developer tools group in the popup"
+  },
+  "highlight_blocks_toggle": {
+    "message": "Highlight Blocks",
+    "description": "Toggle label for the block highlighter developer tool"
+  },
+  "mobile_preview_action": {
+    "message": "Mobile Preview",
+    "description": "Action label to open the site in mobile preview mode"
+  },
+  "bypass_page_cache_action": {
+    "message": "Bypass Page Cache",
+    "description": "Action label to reload the page bypassing the server-side page cache"
+  },
+  "query_monitor_toggle": {
+    "message": "Query Monitor",
+    "description": "Toggle label for the Query Monitor plugin panel"
+  },
+  "clear_site_data_action": {
+    "message": "Clear Site Data (Keep Login)",
+    "description": "Action label to clear browser site data while preserving the login session"
+  },
+
+  "confirm_label": {
+    "message": "Confirm",
+    "description": "Default label for inline confirmation buttons"
+  },
+
+  "site_info_label": {
+    "message": "Site Information",
+    "description": "Section label for the site information panel"
+  },
+  "site_info_loading": {
+    "message": "Loading site information…",
+    "description": "Aria-live status text while site information is being fetched"
+  },
+  "active_theme_label": {
+    "message": "Active theme",
+    "description": "Label for the active theme row in the site information panel"
+  },
+  "plugins_label": {
+    "message": "Plugins",
+    "description": "Section label for the plugins group when the count is zero or unknown"
+  },
+  "plugins_with_count": {
+    "message": "Plugins ($COUNT$)",
+    "description": "Section label for plugins when the total count is known from REST",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "detected_plugins_with_count": {
+    "message": "Detected plugins ($COUNT$)",
+    "description": "Section label for plugins detected via DOM asset paths when REST count is unavailable",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "login_for_plugin_list": {
+    "message": "Log in for a comprehensive list of plugins with additional information.",
+    "description": "Hint shown in the plugins section when the user is logged out"
+  },
+  "nothing_detected": {
+    "message": "Nothing extra we could detect.",
+    "description": "Hint shown when no additional site information could be detected"
+  },
+  "login_for_info": {
+    "message": "Log in for additional information.",
+    "description": "Hint shown in the theme section when the user is logged out"
+  },
+
+  "update_singular": {
+    "message": "$COUNT$ update",
+    "description": "Status badge label for a single pending WordPress update",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "update_plural": {
+    "message": "$COUNT$ updates",
+    "description": "Status badge label for multiple pending WordPress updates",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "pending_comment_singular": {
+    "message": "$COUNT$ pending comment",
+    "description": "Status badge label for a single comment awaiting moderation",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "pending_comment_plural": {
+    "message": "$COUNT$ pending comments",
+    "description": "Status badge label for multiple comments awaiting moderation",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+
+  "edit_category": {
+    "message": "Edit Category",
+    "description": "Edit action label when viewing a category archive"
+  },
+  "edit_tag": {
+    "message": "Edit Tag",
+    "description": "Edit action label when viewing a tag archive"
+  },
+  "edit_term": {
+    "message": "Edit Term",
+    "description": "Edit action label when viewing a taxonomy term archive"
+  },
+  "edit_author": {
+    "message": "Edit Author",
+    "description": "Edit action label when viewing an author archive"
+  },
+  "edit_page_fallback": {
+    "message": "Edit Page",
+    "description": "Fallback edit action label when the post type cannot be determined"
+  },
+  "edit_archive_coming_soon": {
+    "message": "Edit Archive (Coming Soon)",
+    "description": "Disabled edit action label for archive pages not yet supported"
+  },
+  "edit_homepage_coming_soon": {
+    "message": "Edit Homepage (Coming Soon)",
+    "description": "Disabled edit action label for the homepage when not yet supported"
+  },
+  "edit_term_not_resolvable": {
+    "message": "Edit Term (Not Resolvable)",
+    "description": "Disabled edit action label when the term cannot be resolved to an edit URL"
+  },
+  "edit_author_not_resolvable": {
+    "message": "Edit Author (Not Resolvable)",
+    "description": "Disabled edit action label when the author cannot be resolved to an edit URL"
+  },
+  "nothing_to_edit": {
+    "message": "Nothing to Edit",
+    "description": "Disabled edit action label for pages with no editable content (e.g. search results, 404)"
+  },
+  "edit_post_type": {
+    "message": "Edit $TYPE$",
+    "description": "Edit action label prefixed with the post type name (e.g. 'Edit Post', 'Edit Page')",
+    "placeholders": {
+      "type": { "content": "$1" }
+    }
+  },
+
+  "post_type_post": {
+    "message": "Post",
+    "description": "Display name for the 'post' post type"
+  },
+  "post_type_page": {
+    "message": "Page",
+    "description": "Display name for the 'page' post type"
+  },
+  "post_type_media": {
+    "message": "Media",
+    "description": "Display name for the 'attachment' post type"
+  },
+  "post_type_block_pattern": {
+    "message": "Block Pattern",
+    "description": "Display name for the 'wp_block' post type (reusable blocks)"
+  },
+  "post_type_template": {
+    "message": "Template",
+    "description": "Display name for the 'wp_template' post type"
+  },
+  "post_type_template_part": {
+    "message": "Template Part",
+    "description": "Display name for the 'wp_template_part' post type"
+  },
+  "post_type_navigation_menu": {
+    "message": "Navigation Menu",
+    "description": "Display name for the 'wp_navigation' post type"
+  }
+}

@@ -76,7 +76,7 @@
         html.admin-bar, html.wp-toolbar { margin-top: 0 !important; --wp-admin--admin-bar--height: 0px !important; }
       `;
       document.documentElement.appendChild(hideStyle);
-      console.info('[WordPress Browser Extension] Admin bar hidden on this site. Toggle "Show Admin Bar" in the extension popup or the options page.');
+      console.info(chrome.i18n.getMessage('admin_bar_hidden_notice')); // "[WordPress Browser Extension] Admin bar hidden on this site. Toggle "Show Admin Bar" in the extension popup or the options page."
     }
     // Remove `body.admin-bar` so themes that key layout off it (e.g.
     // `body.admin-bar .header { padding-top: 32px }`) collapse cleanly

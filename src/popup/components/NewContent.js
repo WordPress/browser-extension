@@ -26,7 +26,7 @@ export function NewContent({ items = [], onOpen }) {
 			<Collapsible.Trigger className="wpd-newcontent__trigger">
 				<span className="wpd-newcontent__label-group">
 					<Icon icon={plus} size={16} />
-					<span className="wpd-newcontent__label">New</span>
+					<span className="wpd-newcontent__label">{chrome.i18n.getMessage('new_content_label') /* "New" */}</span>
 				</span>
 				<span className={`wpd-newcontent__chevron ${open ? 'is-open' : ''}`} aria-hidden="true">
 					<Icon icon={chevronDown} size={14} />

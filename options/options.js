@@ -4,6 +4,15 @@
  * values always win over these defaults; this page only affects sites
  * the user has not explicitly toggled.
  */
+
+function localizeUI() {
+	document.querySelectorAll('[data-i18n]').forEach((el) => {
+		const msg = chrome.i18n.getMessage(el.dataset.i18n);
+		if (msg) el.textContent = msg;
+	});
+}
+localizeUI();
+
 const PREFS_KEY = 'wp_preferences_v1';
 const CACHE_KEY = 'wp_detection_cache_v1';
 const GLOBAL_NS = '_global';
@@ -53,18 +62,16 @@ async function saveGlobalPref(key, value) {
 	});
 
 	resetButton.addEventListener('click', async () => {
-		const ok = window.confirm(
-			'Clear all extension data?\n\nThis removes every saved per-site preference, the global defaults on this page, and the cached WordPress detection results. Cannot be undone.',
-		);
+		const ok = window.confirm(chrome.i18n.getMessage('options_clear_confirm')); // "Clear all extension data?\n\nThis removes every saved per-site preference, the global defaults on this page, and the cached WordPress detection results. Cannot be undone."
 		if (!ok) return;
 		try {
 			await chrome.storage.local.remove([PREFS_KEY, CACHE_KEY]);
 			adminBarToggle.checked = false;
 			siteInfoToggle.checked = false;
-			resetStatus.textContent = 'Cleared.';
+			resetStatus.textContent = chrome.i18n.getMessage('options_cleared_success'); // "Cleared."
 			resetStatus.dataset.tone = 'ok';
 		} catch (_) {
-			resetStatus.textContent = 'Could not clear data. Try again.';
+			resetStatus.textContent = chrome.i18n.getMessage('options_cleared_error'); // "Could not clear data. Try again."
 			resetStatus.dataset.tone = 'error';
 		}
 		setTimeout(() => {

@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
-  "name": "WordPress Browser Extension",
+  "name": "__MSG_ext_name__",
   "version": "0.9.0",
-  "short_name": "WordPress",
-  "description": "Detect WordPress sites, jump to the editor, identify the host, toggle the admin bar, and more.",
+  "short_name": "__MSG_ext_short_name__",
+  "description": "__MSG_ext_description__",
+  "default_locale": "en",
   "author": "Jake Goldman, Partner at Fueled",
   "homepage_url": "https://github.com/WordPress/browser-extension",
 
   "action": {
-    "default_title": "WordPress Browser Extension",
+    "default_title": "__MSG_ext_action_title__",
     "default_icon": {
       "16": "icons/icon-16.png",
       "32": "icons/icon-32.png",
@@ -60,7 +61,7 @@
         "default": "Alt+Shift+E",
         "mac": "Alt+Shift+E"
       },
-      "description": "Edit this page in WordPress"
+      "description": "__MSG_cmd_edit_this_page__"
     }
   },
 

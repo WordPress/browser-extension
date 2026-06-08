@@ -44,7 +44,7 @@ export function DevTools({ origin, url, hasQueryMonitor = false, qmOpen = false 
 			<Collapsible.Trigger className="wpd-devtools__trigger">
 				<span className="wpd-devtools__label-group">
 					<Icon icon={code} size={16} />
-					<span className="wpd-devtools__label">Developer Tools</span>
+					<span className="wpd-devtools__label">{chrome.i18n.getMessage('dev_tools_label') /* "Developer Tools" */}</span>
 				</span>
 				<span className={`wpd-devtools__chevron ${open ? 'is-open' : ''}`} aria-hidden="true">
 					<Icon icon={chevronDown} size={14} />
@@ -54,31 +54,31 @@ export function DevTools({ origin, url, hasQueryMonitor = false, qmOpen = false 
 				<div className="wpd-devtools__items">
 					<ToggleRow
 						icon={layout}
-						label="Highlight Blocks"
+						label={chrome.i18n.getMessage('highlight_blocks_toggle') /* "Highlight Blocks" */}
 						checked={!!prefs.blockInspectorEnabled}
 						onChange={toggleBlockInspector}
 					/>
 					<ActionRow
 						icon={mobile}
-						label="Mobile Preview"
+						label={chrome.i18n.getMessage('mobile_preview_action') /* "Mobile Preview" */}
 						onClick={() => runAction('mobile-preview', { origin, url })}
 					/>
 					<ActionRow
 						icon={update}
-						label="Bypass Page Cache"
+						label={chrome.i18n.getMessage('bypass_page_cache_action') /* "Bypass Page Cache" */}
 						onClick={() => runAction('cachebust', { origin, url })}
 					/>
 					{hasQueryMonitor && (
 						<ToggleRow
 							icon={search}
-							label="Query Monitor"
+							label={chrome.i18n.getMessage('query_monitor_toggle') /* "Query Monitor" */}
 							checked={qmChecked}
 							onChange={(next) => { setQmChecked(next); toggleQueryMonitor(); }}
 						/>
 					)}
 					<InlineConfirm
 						icon={trash}
-						label="Clear Site Data (Keep Login)"
+						label={chrome.i18n.getMessage('clear_site_data_action') /* "Clear Site Data (Keep Login)" */}
 						onConfirm={() => runAction('clear-data', { origin, url })}
 						destructive
 					/>

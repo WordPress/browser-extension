@@ -100,8 +100,8 @@ function WpAdminActions({ ctx, origin, url }) {
 		}
 	})();
 
-	const typeLabel = ctx.postType ? postTypeLabel(ctx.postType) : 'Page';
-	const verb = ctx.postStatus === 'publish' ? 'View' : 'Preview';
+	const typeLabel = ctx.postType ? postTypeLabel(ctx.postType) : chrome.i18n.getMessage('post_type_page'); // "Page"
+	const verb = chrome.i18n.getMessage(ctx.postStatus === 'publish' ? 'verb_view' : 'verb_preview'); // "View" / "Preview"
 
 	return (
 		<>
@@ -118,13 +118,13 @@ function WpAdminActions({ ctx, origin, url }) {
 			)}
 			<ActionRow
 				icon={globe}
-				label="Visit Site"
+				label={chrome.i18n.getMessage('visit_site') /* "Visit Site" */}
 				onClick={() => runAction('visit-site', { origin, url })}
 				onNewTab={() => runAction('visit-site', { origin, url, newTab: true })}
 			/>
 			<ActionRow
 				icon={dashboard}
-				label="WordPress Admin"
+				label={chrome.i18n.getMessage('wordpress_admin') /* "WordPress Admin" */}
 				onClick={() => runAction('admin', { origin, url })}
 				onNewTab={() => runAction('admin', { origin, url, newTab: true })}
 			/>
@@ -166,7 +166,7 @@ function FrontendLoggedInActions({ ctx, origin, url }) {
 			/>
 			<ActionRow
 				icon={dashboard}
-				label="WordPress Admin"
+				label={chrome.i18n.getMessage('wordpress_admin') /* "WordPress Admin" */}
 				onClick={() => runAction('admin', { origin, url })}
 				onNewTab={() => runAction('admin', { origin, url, newTab: true })}
 			/>
@@ -180,13 +180,13 @@ function LoggedOutActions({ origin, url }) {
 		<>
 			<ActionRow
 				icon={key}
-				label="Log In"
+				label={chrome.i18n.getMessage('log_in') /* "Log In" */}
 				onClick={() => runAction('login', { origin, url })}
 				onNewTab={() => runAction('login', { origin, url, newTab: true })}
 			/>
 			<ActionRow
 				icon={keyboardReturn}
-				label="Log In, Return to Page"
+				label={chrome.i18n.getMessage('log_in_return') /* "Log In, Return to Page" */}
 				onClick={() => runAction('login-return', { origin, url })}
 				onNewTab={() => runAction('login-return', { origin, url, newTab: true })}
 			/>
@@ -196,7 +196,7 @@ function LoggedOutActions({ origin, url }) {
 
 function AdminBarSection({ ctx, origin, prefs, onToggle }) {
 	if (ctx.hasAdminBar) {
-		return <ToggleRow icon={seen} label="Show Admin Bar" checked={!prefs.adminBarHidden} onChange={onToggle} />;
+		return <ToggleRow icon={seen} label={chrome.i18n.getMessage('show_admin_bar') /* "Show Admin Bar" */} checked={!prefs.adminBarHidden} onChange={onToggle} />;
 	}
 	// Logged-in but no admin bar — could be a profile preference, a theme
 	// filter (show_admin_bar(false) or unhooking wp_admin_bar_render), or
@@ -204,15 +204,15 @@ function AdminBarSection({ ctx, origin, prefs, onToggle }) {
 	// causes; "appears" hedges honestly across all cases.
 	return (
 		<>
-			<ToggleRow icon={seen} label="Show Admin Bar" checked={false} disabled />
+			<ToggleRow icon={seen} label={chrome.i18n.getMessage('show_admin_bar') /* "Show Admin Bar" */} checked={false} disabled />
 			<div className="wpd-toggle-hint">
-				Admin bar appears to be disabled by your profile or theme, which limits this extension.{' '}
+				{chrome.i18n.getMessage('admin_bar_disabled_info') /* "Admin bar appears to be disabled by your profile or theme, which limits this extension." */}{' '}
 				<button
 					type="button"
 					className="wpd-info-row__link"
 					onClick={() => runAction('profile', { origin, url: '' })}
 				>
-					Check profile →
+					{chrome.i18n.getMessage('check_profile_link') /* "Check profile →" */}
 				</button>
 			</div>
 		</>

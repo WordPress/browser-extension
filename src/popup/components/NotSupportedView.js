@@ -7,8 +7,8 @@ export function NotSupportedView() {
 			<EmptyState.Visual>
 				<EmptyState.Icon icon={globe} />
 			</EmptyState.Visual>
-			<EmptyState.Title>Nothing to inspect here</EmptyState.Title>
-			<EmptyState.Description>Open a website to get started.</EmptyState.Description>
+			<EmptyState.Title>{chrome.i18n.getMessage('not_supported_title') /* "Nothing to inspect here" */}</EmptyState.Title>
+			<EmptyState.Description>{chrome.i18n.getMessage('not_supported_description') /* "Open a website to get started." */}</EmptyState.Description>
 		</EmptyState.Root>
 	);
 }
