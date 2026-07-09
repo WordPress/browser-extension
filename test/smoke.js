@@ -24,6 +24,7 @@ const restSrc   = fs.readFileSync(path.join(__dirname, '..', 'lib', 'rest.js'), 
 const hostSrc   = fs.readFileSync(path.join(__dirname, '..', 'lib', 'host.js'),   'utf8');
 const mySitesSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'my-sites.js'), 'utf8');
 const blockInspectorSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'block-inspector.js'), 'utf8');
+const editorPreferencesSrc = fs.readFileSync(path.join(__dirname, '..', 'lib', 'editor-preferences.js'), 'utf8');
 
 function loadModules(dom) {
   const ctx = dom.window;
@@ -37,6 +38,7 @@ function loadModules(dom) {
   // exposed for these tests). Only defines functions at load — the DOM/observer
   // work happens inside enable(), which the tests don't call.
   new Function('globalThis', 'document', 'window', blockInspectorSrc)(ctx, ctx.document, ctx);
+  new Function('globalThis', 'document', 'window', editorPreferencesSrc)(ctx, ctx.document, ctx);
   return ctx;
 }
 
@@ -1175,6 +1177,73 @@ async function main() {
 
     // Oversized input is bounded out rather than parsed.
     assert(parse('x'.repeat(2 * 1024 * 1024 + 1)).length === 0, 'oversized input returns no blocks');
+  }
+
+  // --- 31. Editor preferences: reading the inlined snapshot + gating -----
+  {
+    console.log('\n[31] WPEditorPreferences — DOM snapshot read + needsListViewDefault gating');
+
+    // Realistic shape of the inline script WordPress core emits next to the
+    // `wp-preferences` handle (see wp_default_packages_inline_scripts()).
+    const inlineScript = (serverDataJson) => `
+      ( function() {
+        var serverData = ${serverDataJson};
+        var userId = "5";
+        var persistenceLayer = wp.preferencesPersistence.__unstableCreatePersistenceLayer( serverData, userId );
+        var preferencesStore = wp.preferences.store;
+        wp.data.dispatch( preferencesStore ).setPersistenceLayer( persistenceLayer );
+      } ) ();
+    `;
+
+    // Both the post editor and the site editor read/write the SAME shared
+    // "core" scope for this preference (edit-post.js and edit-site.js both
+    // call getPreference("core", "showListViewByDefault")) — there is no
+    // separate per-surface scope.
+    const dom1 = new JSDOM(`<html><body><script>${inlineScript(
+      '{"core":{"showListViewByDefault":false,"distractionFree":true}}'
+    )}</script></body></html>`);
+    const ctx1 = loadModules(dom1);
+    const { readPersistedPreferences, needsListViewDefault, SCOPE } = ctx1.WPEditorPreferences;
+    assert(SCOPE === 'core', 'scope constant is the shared "core" preferences scope');
+    const data1 = readPersistedPreferences(ctx1.document);
+    assert(data1 && data1.core.showListViewByDefault === false,
+      'parses serverData out of the inline script');
+    assert(needsListViewDefault(data1) === true,
+      'needs it when the preference is false');
+
+    // Already on → nothing to do.
+    const dom2 = new JSDOM(`<html><body><script>${inlineScript(
+      '{"core":{"showListViewByDefault":true}}'
+    )}</script></body></html>`);
+    const ctx2 = loadModules(dom2);
+    const data2 = ctx2.WPEditorPreferences.readPersistedPreferences(ctx2.document);
+    assert(ctx2.WPEditorPreferences.needsListViewDefault(data2) === false,
+      'already true → does not need it');
+
+    // Brand-new account: WordPress inlines `""` (empty user meta), not an
+    // object — regex doesn't match "{...}", so read returns null.
+    const dom3 = new JSDOM(`<html><body><script>${inlineScript('""')}</script></body></html>`);
+    const ctx3 = loadModules(dom3);
+    assert(ctx3.WPEditorPreferences.readPersistedPreferences(ctx3.document) === null,
+      'non-object serverData (new account) reads as null');
+    assert(ctx3.WPEditorPreferences.needsListViewDefault(null) === true,
+      'null snapshot → treated as needing it');
+
+    // No matching inline script at all (e.g. not a block editor page).
+    const dom4 = new JSDOM(`<html><body><script>console.log('unrelated');</script></body></html>`);
+    const ctx4 = loadModules(dom4);
+    assert(ctx4.WPEditorPreferences.readPersistedPreferences(ctx4.document) === null,
+      'no wp-preferences inline script → null');
+
+    // "core" scope present (other prefs saved) but this key absent — still
+    // reads as needing it.
+    const dom5 = new JSDOM(`<html><body><script>${inlineScript(
+      '{"core":{"distractionFree":true}}'
+    )}</script></body></html>`);
+    const ctx5 = loadModules(dom5);
+    const data5 = ctx5.WPEditorPreferences.readPersistedPreferences(ctx5.document);
+    assert(ctx5.WPEditorPreferences.needsListViewDefault(data5) === true,
+      'scope present but preference key absent → still needs it');
   }
 
   console.log(`\n${failures === 0 ? 'All tests passed.' : failures + ' failure(s).'}`);

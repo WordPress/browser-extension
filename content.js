@@ -177,6 +177,34 @@
     });
   }
 
+  // -- List View default (Block Editor) -------------------------------------
+  // Opt-in (#32): turns on "Always open List View" for the current user,
+  // mirroring what clicking that toggle in Editor Preferences does. See
+  // lib/editor-preferences.js for why this reads the current value from the
+  // DOM instead of a REST call, and background.js for the MAIN-world
+  // dispatch that actually flips it (content scripts can't reach the page's
+  // `window.wp`).
+  const isBlockEditorPage = isWpAdmin && document.body.classList.contains('block-editor-page');
+
+  async function loadListViewDefaultPref() {
+    const prefsRoot = await loadPrefsRoot();
+    return (prefsRoot._global || {}).listViewDefaultEnabled === true;
+  }
+
+  if (isBlockEditorPage && globalThis.WPEditorPreferences) {
+    loadListViewDefaultPref().then((enabled) => {
+      if (!enabled) return;
+      const { readPersistedPreferences, needsListViewDefault } = globalThis.WPEditorPreferences;
+      const serverData = readPersistedPreferences(document);
+      // Already set — most page loads once the account is primed — so skip
+      // the round trip to background.js entirely.
+      if (!needsListViewDefault(serverData)) return;
+      try {
+        chrome.runtime.sendMessage({ type: 'ENSURE_LIST_VIEW_DEFAULT' }).catch(() => {});
+      } catch (_) { /* extension context invalidated */ }
+    });
+  }
+
   // -- Popup messaging -----------------------------------------------------
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
