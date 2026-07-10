@@ -40,6 +40,7 @@ cp lib/detect.js           "$STAGE/lib/"
 cp lib/rest.js             "$STAGE/lib/"
 cp lib/host.js             "$STAGE/lib/"
 cp lib/block-inspector.js  "$STAGE/lib/"
+cp lib/editor-preferences.js "$STAGE/lib/"
 cp lib/my-sites.js         "$STAGE/lib/"
 
 cp popup/popup.html "$STAGE/popup/"
