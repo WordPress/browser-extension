@@ -191,13 +191,27 @@
     return (prefsRoot._global || {}).listViewDefaultEnabled === true;
   }
 
+  // One-shot per origin — once we've successfully nudged it on, we never
+  // check again, even if the user later turns List View back off themselves.
+  // Without this, "not true" reads as "needs it" forever and fights that
+  // choice on every editor page load.
+  async function listViewDefaultAlreadyApplied() {
+    const prefsRoot = await loadPrefsRoot();
+    return !!(prefsRoot[location.origin] || {}).listViewDefaultApplied;
+  }
+
   if (isBlockEditorPage && globalThis.WPEditorPreferences) {
-    loadListViewDefaultPref().then((enabled) => {
+    loadListViewDefaultPref().then(async (enabled) => {
       if (!enabled) return;
+      if (await listViewDefaultAlreadyApplied()) return;
       const { readPersistedPreferences, needsListViewDefault } = globalThis.WPEditorPreferences;
       const serverData = readPersistedPreferences(document);
-      // Already set — most page loads once the account is primed — so skip
-      // the round trip to background.js entirely.
+      // Already true — most page loads once the account is primed — so skip
+      // the round trip to background.js. The one-shot marker itself is only
+      // ever written by background.js, after a dispatch it actually made
+      // succeeds (see ensureListViewDefault); this early-exit intentionally
+      // leaves it unset so a value that became true some other way doesn't
+      // get treated as "we already asserted it."
       if (!needsListViewDefault(serverData)) return;
       try {
         chrome.runtime.sendMessage({ type: 'ENSURE_LIST_VIEW_DEFAULT' }).catch(() => {});

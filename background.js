@@ -278,8 +278,20 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
   // only accepted from a content script's own tab, never the popup.
   if (msg.type === 'ENSURE_LIST_VIEW_DEFAULT') {
     if (!sender.tab || !sender.tab.id) return;
+    const origin = originFromSender(sender);
     ensureListViewDefault(sender.tab.id)
-      .then(() => sendResponse({ ok: true }))
+      .then(async (applied) => {
+        // Only record the one-shot "don't touch this origin again" marker
+        // once the dispatch actually succeeded — an unrecorded miss (e.g.
+        // wp.data wasn't ready yet) stays eligible to retry on the next
+        // editor page load instead of silently giving up forever. Routed
+        // through mutatePref so it shares the serialized write chain with
+        // every other wp_preferences_v1 mutation (no read-modify-write race).
+        if (applied && origin) {
+          await mutatePref({ ns: origin, key: 'listViewDefaultApplied', value: true });
+        }
+        sendResponse({ ok: true, applied });
+      })
       .catch(() => sendResponse({ ok: false }));
     return true;
   }
@@ -324,9 +336,10 @@ function isExtensionPageSender(sender) {
 // JSON directly, so there's no risk of clobbering the user's other saved
 // preferences (dark mode, panel states, etc). Runs in the page's MAIN world
 // via chrome.scripting — content scripts can't reach page globals like
-// `window.wp` directly.
+// `window.wp` directly. Returns whether the dispatch actually ran (false
+// when wp.data / the preferences store weren't available).
 async function ensureListViewDefault(tabId) {
-  await chrome.scripting.executeScript({
+  const [{ result } = {}] = await chrome.scripting.executeScript({
     target: { tabId },
     world: 'MAIN',
     func: (scope, preferenceName) => {
@@ -341,6 +354,7 @@ async function ensureListViewDefault(tabId) {
     },
     args: [WPEditorPreferences.SCOPE, WPEditorPreferences.PREFERENCE_NAME],
   });
+  return result === true;
 }
 
 // Polls until the window accepts the requested size or closes. Safari ignores
