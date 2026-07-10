@@ -17,6 +17,7 @@ const PREFS_KEY = 'wp_preferences_v1';
 const GLOBAL_NS = '_global';
 
 const adminBarToggle = document.getElementById('adminBarHiddenDefault');
+const listViewDefaultToggle = document.getElementById('listViewDefaultEnabled');
 const siteInfoToggle = document.getElementById('siteInfoEnabled');
 const resetButton = document.getElementById('resetData');
 const resetStatus = document.getElementById('resetStatus');
@@ -42,10 +43,15 @@ async function saveGlobalPref(key, value) {
 (async () => {
 	const globalPrefs = await loadGlobalPrefs();
 	adminBarToggle.checked = globalPrefs.adminBarHidden === true;
+	listViewDefaultToggle.checked = globalPrefs.listViewDefaultEnabled === true;
 	siteInfoToggle.checked = globalPrefs.siteInfoEnabled === true;
 
 	adminBarToggle.addEventListener('change', () => {
 		saveGlobalPref('adminBarHidden', adminBarToggle.checked);
+	});
+
+	listViewDefaultToggle.addEventListener('change', () => {
+		saveGlobalPref('listViewDefaultEnabled', listViewDefaultToggle.checked);
 	});
 
 	siteInfoToggle.addEventListener('change', () => {
@@ -57,6 +63,7 @@ async function saveGlobalPref(key, value) {
 		if (area !== 'local' || !changes[PREFS_KEY]) return;
 		const incoming = (changes[PREFS_KEY].newValue || {})[GLOBAL_NS] || {};
 		adminBarToggle.checked = incoming.adminBarHidden === true;
+		listViewDefaultToggle.checked = incoming.listViewDefaultEnabled === true;
 		siteInfoToggle.checked = incoming.siteInfoEnabled === true;
 	});
 
@@ -71,6 +78,7 @@ async function saveGlobalPref(key, value) {
 			// wp_devtools_open behind).
 			await chrome.storage.local.clear();
 			adminBarToggle.checked = false;
+			listViewDefaultToggle.checked = false;
 			siteInfoToggle.checked = false;
 			resetStatus.textContent = chrome.i18n.getMessage('options_cleared_success'); // "Cleared."
 			resetStatus.dataset.tone = 'ok';

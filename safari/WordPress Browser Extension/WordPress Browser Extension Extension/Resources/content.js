@@ -177,6 +177,48 @@
     });
   }
 
+  // -- List View default (Block Editor) -------------------------------------
+  // Opt-in (#32): turns on "Always open List View" for the current user,
+  // mirroring what clicking that toggle in Editor Preferences does. See
+  // lib/editor-preferences.js for why this reads the current value from the
+  // DOM instead of a REST call, and background.js for the MAIN-world
+  // dispatch that actually flips it (content scripts can't reach the page's
+  // `window.wp`).
+  const isBlockEditorPage = isWpAdmin && document.body.classList.contains('block-editor-page');
+
+  async function loadListViewDefaultPref() {
+    const prefsRoot = await loadPrefsRoot();
+    return (prefsRoot._global || {}).listViewDefaultEnabled === true;
+  }
+
+  // One-shot per origin — once we've successfully nudged it on, we never
+  // check again, even if the user later turns List View back off themselves.
+  // Without this, "not true" reads as "needs it" forever and fights that
+  // choice on every editor page load.
+  async function listViewDefaultAlreadyApplied() {
+    const prefsRoot = await loadPrefsRoot();
+    return !!(prefsRoot[location.origin] || {}).listViewDefaultApplied;
+  }
+
+  if (isBlockEditorPage && globalThis.WPEditorPreferences) {
+    loadListViewDefaultPref().then(async (enabled) => {
+      if (!enabled) return;
+      if (await listViewDefaultAlreadyApplied()) return;
+      const { readPersistedPreferences, needsListViewDefault } = globalThis.WPEditorPreferences;
+      const serverData = readPersistedPreferences(document);
+      // Already true — most page loads once the account is primed — so skip
+      // the round trip to background.js. The one-shot marker itself is only
+      // ever written by background.js, after a dispatch it actually made
+      // succeeds (see ensureListViewDefault); this early-exit intentionally
+      // leaves it unset so a value that became true some other way doesn't
+      // get treated as "we already asserted it."
+      if (!needsListViewDefault(serverData)) return;
+      try {
+        chrome.runtime.sendMessage({ type: 'ENSURE_LIST_VIEW_DEFAULT' }).catch(() => {});
+      } catch (_) { /* extension context invalidated */ }
+    });
+  }
+
   // -- Popup messaging -----------------------------------------------------
 
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {

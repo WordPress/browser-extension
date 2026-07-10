@@ -44,6 +44,18 @@
     "message": "When enabled, the admin bar starts hidden on new WordPress sites. Per-site preferences in the popup still take precedence.",
     "description": "Hint text describing the hide-admin-bar toggle behavior"
   },
+  "options_editor_section": {
+    "message": "Block Editor",
+    "description": "Section heading for Block Editor settings"
+  },
+  "options_list_view_default_label": {
+    "message": "Always open List View",
+    "description": "Toggle label for the List View default option"
+  },
+  "options_list_view_default_hint": {
+    "message": "When enabled, sets your \"List View\" editor preference to open by default on every WordPress site you sign into — the same change as turning it on yourself in Editor Preferences. Off by default; only ever turns the preference on, never off.",
+    "description": "Hint text describing the List View default toggle behavior"
+  },
   "options_experimental_section": {
     "message": "Experimental",
     "description": "Section heading for experimental features"

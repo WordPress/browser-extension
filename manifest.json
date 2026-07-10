@@ -35,7 +35,7 @@
     },
     {
       "matches": ["http://*/*", "https://*/*"],
-      "js": ["lib/detect.js", "lib/rest.js", "lib/host.js", "lib/block-inspector.js", "content.js"],
+      "js": ["lib/detect.js", "lib/rest.js", "lib/host.js", "lib/block-inspector.js", "lib/editor-preferences.js", "content.js"],
       "run_at": "document_idle",
       "all_frames": false
     }

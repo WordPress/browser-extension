@@ -72,6 +72,7 @@ Browser-wide defaults live on a separate options page, surfaced through the brow
 Current options:
 
 - **Hide admin bar by default** — Flips the per-site default for the admin bar toggle. Per-site choices in the popup always win over this default.
+- **Always open List View** — Sets your Block Editor "List View" preference to open by default on every WordPress site you sign into, the same change as turning it on yourself in Editor Preferences. Off by default; only ever turns the preference on, never off, and never touches the REST API or your other saved preferences directly — it dispatches through the editor's own preferences store so WordPress's own persistence does the save.
 - **Show site information panel (experimental)** — Adds a panel to the popup that surfaces the active theme, installed plugins, site name, and REST namespaces. Detection is heuristic and asset-path inference can produce duplicates or false positives, so it is off by default. Powered by the WP REST API for admins, with DOM-scanned slugs as a graceful fallback.
 - **Clear all data** — Wipes per-site preferences, the global defaults above, the cached WordPress detection results, and the saved My Sites list. Useful for testing or starting fresh.
 

@@ -19,6 +19,11 @@ importScripts('lib/my-sites.js');
 // admin-URL priority chain and its same-origin guard.
 importScripts('lib/rest.js');
 
+// Editor-preferences constants (globalThis.WPEditorPreferences), shared with
+// content.js so the scope list can't drift between the read-side check there
+// and the write-side dispatch here.
+importScripts('lib/editor-preferences.js');
+
 // Detection results are cached one storage key per origin (wp_cache_<origin>)
 // rather than a single blob, so a page load reads and writes only its own
 // origin's entry instead of the whole browsing history, and concurrent writes
@@ -268,6 +273,29 @@ chrome.runtime.onMessage.addListener((msg, sender, sendResponse) => {
     return true;
   }
 
+  // Opt-in (#32): content.js only sends this after confirming, from the
+  // DOM-inlined preferences snapshot, that the preference isn't already on —
+  // only accepted from a content script's own tab, never the popup.
+  if (msg.type === 'ENSURE_LIST_VIEW_DEFAULT') {
+    if (!sender.tab || !sender.tab.id) return;
+    const origin = originFromSender(sender);
+    ensureListViewDefault(sender.tab.id)
+      .then(async (applied) => {
+        // Only record the one-shot "don't touch this origin again" marker
+        // once the dispatch actually succeeded — an unrecorded miss (e.g.
+        // wp.data wasn't ready yet) stays eligible to retry on the next
+        // editor page load instead of silently giving up forever. Routed
+        // through mutatePref so it shares the serialized write chain with
+        // every other wp_preferences_v1 mutation (no read-modify-write race).
+        if (applied && origin) {
+          await mutatePref({ ns: origin, key: 'listViewDefaultApplied', value: true });
+        }
+        sendResponse({ ok: true, applied });
+      })
+      .catch(() => sendResponse({ ok: false }));
+    return true;
+  }
+
   // Early downgrade hint from lib/early.js at DOMContentLoaded (#59): the
   // icon painted from cache can claim logged-in for seconds before full
   // detection reports the logged-out DOM at document_idle. Content scripts
@@ -298,6 +326,35 @@ function isExtensionPageSender(sender) {
   } catch (_) {
     return false;
   }
+}
+
+// Turns on "Always open List View" for the current user by dispatching
+// through the Block Editor's own already-registered preferences store — the
+// same store update a click on that Editor Preferences toggle would cause.
+// WordPress's own debounced persistence (already wired with the correct
+// nonce) does the actual save; we never touch the REST API or the stored
+// JSON directly, so there's no risk of clobbering the user's other saved
+// preferences (dark mode, panel states, etc). Runs in the page's MAIN world
+// via chrome.scripting — content scripts can't reach page globals like
+// `window.wp` directly. Returns whether the dispatch actually ran (false
+// when wp.data / the preferences store weren't available).
+async function ensureListViewDefault(tabId) {
+  const [{ result } = {}] = await chrome.scripting.executeScript({
+    target: { tabId },
+    world: 'MAIN',
+    func: (scope, preferenceName) => {
+      try {
+        const dispatch = window.wp && window.wp.data && window.wp.data.dispatch('core/preferences');
+        if (!dispatch) return false;
+        dispatch.set(scope, preferenceName, true);
+        return true;
+      } catch (_) {
+        return false;
+      }
+    },
+    args: [WPEditorPreferences.SCOPE, WPEditorPreferences.PREFERENCE_NAME],
+  });
+  return result === true;
 }
 
 // Polls until the window accepts the requested size or closes. Safari ignores
