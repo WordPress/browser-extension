@@ -1177,6 +1177,36 @@ async function main() {
     assert(parse('x'.repeat(2 * 1024 * 1024 + 1)).length === 0, 'oversized input returns no blocks');
   }
 
+  // --- 31. Chrome manifest staging — activeTab dropped, rest intact ------
+  {
+    console.log('\n[31] stage-chrome-manifest — Chrome package drops only activeTab');
+    const { chromeManifest, CHROME_DROP_PERMISSIONS } =
+      require('../scripts/stage-chrome-manifest.js');
+    const repo = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'manifest.json'), 'utf8'));
+
+    // Invariant: the repo manifest (which the Safari build mirrors verbatim)
+    // keeps activeTab. Only the Chrome package strips it; Safari removal is a
+    // separate, later pass. If this fails, the divergence has leaked into the
+    // shared manifest.
+    assert(repo.permissions.includes('activeTab'),
+      'repo manifest keeps activeTab (Safari-mirror invariant)');
+    assert(CHROME_DROP_PERMISSIONS.includes('activeTab'), 'activeTab is on the Chrome drop list');
+
+    const chrome = chromeManifest(repo);
+    assert(!chrome.permissions.includes('activeTab'), 'staged Chrome manifest drops activeTab');
+    assert(['storage', 'scripting', 'cookies'].every((p) => chrome.permissions.includes(p)),
+      'staged Chrome manifest keeps storage/scripting/cookies');
+    assert(JSON.stringify(chrome.host_permissions) === JSON.stringify(repo.host_permissions),
+      'host_permissions unchanged in the Chrome manifest');
+
+    // Nothing but `permissions` may differ, and the input must not be mutated.
+    const changed = Object.keys(repo)
+      .filter((k) => k !== 'permissions')
+      .filter((k) => JSON.stringify(repo[k]) !== JSON.stringify(chrome[k]));
+    assert(changed.length === 0, `only permissions differ (changed: ${changed.join(', ') || 'none'})`);
+    assert(repo.permissions.includes('activeTab'), 'chromeManifest does not mutate its input');
+  }
+
   console.log(`\n${failures === 0 ? 'All tests passed.' : failures + ' failure(s).'}`);
   process.exit(failures === 0 ? 0 : 1);
 }
