@@ -27,7 +27,11 @@ npm run build > /dev/null
 rm -rf "$STAGE"
 mkdir -p "$STAGE/lib" "$STAGE/popup" "$STAGE/options" "$STAGE/dist" "$STAGE/icons"
 
-cp manifest.json    "$STAGE/"
+# Chrome ships the narrowest permission set: the staged manifest drops
+# activeTab (redundant next to host_permissions). This is the ONLY point where
+# the shipped Chrome manifest diverges from the repo manifest — the repo/Safari
+# manifest keeps activeTab for now. See scripts/stage-chrome-manifest.js and #61.
+node "$ROOT/scripts/stage-chrome-manifest.js" manifest.json "$STAGE/manifest.json"
 cp background.js    "$STAGE/"
 cp content.js       "$STAGE/"
 
