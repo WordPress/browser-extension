@@ -39,3 +39,9 @@ We aim to acknowledge reports within five business days. After triage we coordin
 ## Permissions reasoning
 
 The extension requests `storage`, `activeTab`, `scripting`, `cookies`, and `host_permissions` for `http://*/*` and `https://*/*`. The reasoning for each is documented in [`CONTRIBUTING.md`](CONTRIBUTING.md#conventions). New permission requests are discussed publicly before being added, and the v1.0 milestone freezes the surface.
+
+### Chrome package: `activeTab` removed
+
+The **shipped Chrome package** drops `activeTab`. With the broad `http`/`https` host permissions already present, `activeTab` grants nothing extra — Chrome's restricted "on click" site-access mode works by withholding and re-granting host permissions on invocation, not through `activeTab` — and the Chrome Web Store expects the narrowest permission set that supports shipped functionality. `scripts/package-chrome.sh` stages the manifest through `scripts/stage-chrome-manifest.js`, which filters `activeTab` out. This is the only point where the submitted Chrome manifest diverges from the repository manifest.
+
+The **repository manifest**, which the Safari build mirrors verbatim, keeps `activeTab` for now: an earlier permission-narrowing experiment broke Safari detection in ways we didn't foresee, so Safari-side removal is deferred to the Safari / App Store store-readiness pass, where it will be re-evaluated and tested before submission. Until then Safari intentionally ships the superset. See [issue #61](https://github.com/WordPress/browser-extension/issues/61).
