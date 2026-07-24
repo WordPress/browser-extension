@@ -5,11 +5,15 @@ same extension files in a macOS host app — Safari's own packaging model.
 The runtime (background, content scripts, popup) is identical to the
 Chrome build.
 
-> The container app and extension targets keep `com.fabiankaegy.wp-detective`
-> / `com.fabiankaegy.wp-detective.Extension` as their bundle identifiers —
-> Fabian's namespace from the project's origin. Changing those requires
-> coordinating with whoever owns the Apple developer account / signing
-> identity and is tracked in [ROADMAP.md](ROADMAP.md) for pre-store-release prep.
+> The container app and extension targets use `org.wordpress.browserextension`
+> / `org.wordpress.browserextension.Extension` as their bundle identifiers,
+> under the WordPress Foundation Apple Developer account (Team ID
+> `6MBPTHPZ22`). The committed project deliberately leaves `DEVELOPMENT_TEAM`
+> unset so that contributors outside that team can build and run locally with
+> personal or ad-hoc signing; the team is selected at archive/submission time.
+> Development installs signed under the previous `com.fabiankaegy.wp-detective`
+> identifiers appear to Safari as a separate leftover extension and can be
+> removed by deleting the old built app.
 
 ## Build & install (developer)
 
@@ -120,19 +124,19 @@ The project under `safari/` was produced by:
 xcrun safari-web-extension-converter ./path-to-runtime-files \
   --project-location ./safari \
   --app-name "WordPress Browser Extension" \
-  --bundle-identifier com.fabiankaegy.wp-detective \
+  --bundle-identifier org.wordpress.browserextension \
   --swift --macos-only --copy-resources --no-open
 ```
 
 Re-run it only when changing major project structure (e.g. adding iOS,
 renaming the app). One fix-up is needed after regeneration: the converter
 auto-capitalizes the app's product name into the app bundle ID
-(`com.fabiankaegy.WordPress-Browser-Extension`), which then doesn't share
+(`org.wordpress.WordPress-Browser-Extension`), which then doesn't share
 a prefix with the extension's bundle ID and fails the embedded-binary
 check. Run:
 
 ```
 sed -i '' \
-  's|PRODUCT_BUNDLE_IDENTIFIER = "com.fabiankaegy.WordPress-Browser-Extension";|PRODUCT_BUNDLE_IDENTIFIER = "com.fabiankaegy.wp-detective";|g' \
+  's|PRODUCT_BUNDLE_IDENTIFIER = "org.wordpress.WordPress-Browser-Extension";|PRODUCT_BUNDLE_IDENTIFIER = "org.wordpress.browserextension";|g' \
   'safari/WordPress Browser Extension/WordPress Browser Extension.xcodeproj/project.pbxproj'
 ```
