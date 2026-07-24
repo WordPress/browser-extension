@@ -9,7 +9,7 @@ import Cocoa
 import SafariServices
 import WebKit
 
-let extensionBundleIdentifier = "com.fabiankaegy.wp-detective.Extension"
+let extensionBundleIdentifier = "org.wordpress.browserextension.Extension"
 
 class ViewController: NSViewController, WKNavigationDelegate, WKScriptMessageHandler {
 
