@@ -2,6 +2,12 @@
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
+	<!-- The extension uses only HTTPS through the system's own networking, which
+	     qualifies for the standard export-compliance exemption. Declaring it here
+	     means App Store Connect stops holding each uploaded build in "Missing
+	     Compliance" pending a manual answer. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>SFSafariWebExtensionConverterVersion</key>
 	<string>26.5</string>
 </dict>
