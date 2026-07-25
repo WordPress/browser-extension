@@ -8,6 +8,11 @@
 	     Compliance" pending a manual answer. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Required for Mac App Store submission: the store rejects an archive
+	     whose Info.plist has no category UTI (error 90242). Keep this in sync
+	     with the primary category on the App Store Connect listing. -->
+	<key>LSApplicationCategoryType</key>
+	<string>public.app-category.developer-tools</string>
 	<key>SFSafariWebExtensionConverterVersion</key>
 	<string>26.5</string>
 </dict>
