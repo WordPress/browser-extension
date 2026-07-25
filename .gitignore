@@ -18,6 +18,9 @@ safari/**/build/
 # Xcode build output (DerivedData/intermediates) when the Safari project is
 # built with its output directory set here — generated, never committed
 safari-build/
+# App Store archive and exported installer package — regenerated per
+# submission from the tagged source, never committed
+build/
 # local migration scratch — referenced during the transfer to
 # WordPress/browser-extension; not shipped to either repo
 .transfer/
