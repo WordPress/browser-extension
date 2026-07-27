@@ -1044,6 +1044,10 @@ body {
 	padding: 28px var(--wpd-pad-x) 32px;
 	background: var(--wpd-surface);
 	margin: 0 auto;
+	/* EmptyState.Root ships max-width: 320px; without this override the surface
+	 * sits inset in the 380px popup and --wpd-bg shows through as a band in dark
+	 * mode, where every other view is full-bleed. */
+	max-width: none;
 }
 
 /* Loading & empty states ----------------------------------------------- */
