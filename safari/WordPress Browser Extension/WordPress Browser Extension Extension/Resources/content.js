@@ -149,8 +149,16 @@
   const blockInspectorSupported = !isWpAdmin;
 
   async function loadBlockInspectorPref() {
-    const prefs = (await loadPrefsRoot())[location.origin];
-    return !!(prefs && prefs.blockInspectorEnabled);
+    const prefsRoot = await loadPrefsRoot();
+    const prefs = prefsRoot[location.origin];
+    const globalPrefs = prefsRoot._global || {};
+    // Same per-origin-then-_global precedence as loadAdminBarPref. The popup's
+    // usePrefs merges `_global` for every key, so reading only the per-origin
+    // namespace here would let its toggle read on while the page never outlines.
+    if (prefs && typeof prefs.blockInspectorEnabled === 'boolean') {
+      return prefs.blockInspectorEnabled === true;
+    }
+    return globalPrefs.blockInspectorEnabled === true;
   }
 
   function applyBlockInspector(enabled) {
