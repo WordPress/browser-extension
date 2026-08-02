@@ -225,6 +225,46 @@ async function main() {
     assert(hintsIn(anon).length === 0, 'no hint without a cached logged-in claim');
   }
 
+  // --- 41. Block inspector pref precedence (per-origin, then _global) ------
+  {
+    console.log('\n[41] block inspector honours per-origin over _global (#76)');
+
+    // Observes enable/disable instead of loading the real inspector: the
+    // harness ctx is content.js's globalThis, so a stub installed before
+    // runContent() receives exactly the calls the page would.
+    const inspect = (storageData) => {
+      const page = makePage(WP_LOGGED_IN_PAGE, { storageData });
+      const calls = { enabled: 0, disabled: 0 };
+      page.ctx.WPDBlockInspector = {
+        enable: () => { calls.enabled++; },
+        disable: () => { calls.disabled++; },
+      };
+      page.runContent();
+      return settle().then(() => calls);
+    };
+
+    const viaGlobal = await inspect({
+      wp_preferences_v1: { _global: { blockInspectorEnabled: true } },
+    });
+    assert(viaGlobal.enabled === 1, 'a _global default alone enables the inspector');
+
+    const originWins = await inspect({
+      wp_preferences_v1: {
+        'https://example.com': { blockInspectorEnabled: false },
+        _global: { blockInspectorEnabled: true },
+      },
+    });
+    assert(originWins.enabled === 0, 'explicit per-origin false beats a _global true');
+
+    const viaOrigin = await inspect({
+      wp_preferences_v1: { 'https://example.com': { blockInspectorEnabled: true } },
+    });
+    assert(viaOrigin.enabled === 1, 'per-origin true enables with no _global set');
+
+    const unset = await inspect({ wp_preferences_v1: {} });
+    assert(unset.enabled === 0, 'nothing set leaves the inspector off');
+  }
+
   console.log(`\n${failures === 0 ? 'Content lifecycle tests passed.' : failures + ' failure(s).'}`);
   process.exit(failures === 0 ? 0 : 1);
 }

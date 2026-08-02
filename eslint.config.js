@@ -18,6 +18,9 @@ module.exports = [
 			'release/**',
 			'safari/**',
 			'safari-build/**',
+			// App Store archive/export output (gitignored); the archived .app
+			// carries copies of the bundles that are not lintable source.
+			'build/**',
 			'test/node_modules/**',
 		],
 	},
