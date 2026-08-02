@@ -26,9 +26,9 @@
     "react-dom": "^18.3.1"
   },
   "devDependencies": {
-    "@wordpress/scripts": "^32.6.0",
+    "@wordpress/scripts": "^34.0.0",
     "cross-env": "^7.0.3",
-    "sharp": "^0.34.5"
+    "sharp": "^0.35.0"
   },
   "browserslist": [
     "last 2 Chrome versions",
