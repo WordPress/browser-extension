@@ -27,7 +27,7 @@ A few extras follow naturally from sitting at the browser level instead of insid
 
 ## Status
 
-**v0.10.x — pre-1.0, in production use.** A dedicated v0.11.x phase will handle store-readiness work (permissions audit, bundle identifier, store listing assets, publisher account decisions) before the v1.0 milestone of initial official directory releases on the **Chrome Web Store** and **Safari / Mac App Store** under the WordPress publisher account. Firefox and Edge follow post-1.0. See [`ROADMAP.md`](ROADMAP.md) for what's locked, what's open, and what's next.
+**v1.0.0-rc1 — release candidate, in production use.** The v0.11.x store-readiness phase is complete: permissions audited against least-privilege with per-entry rationale in [`SECURITY.md`](SECURITY.md), the packaged Chrome build dropping the redundant `activeTab` ([#61](https://github.com/WordPress/browser-extension/issues/61)), a published privacy policy, and correctness linting gating CI. The v1.0 milestone is the initial official directory releases on the **Chrome Web Store** and **Safari / Mac App Store** under the WordPress publisher account; Safari store-readiness is the remaining gate. Firefox and Edge follow post-1.0. See [`ROADMAP.md`](ROADMAP.md) for what's locked, what's open, and what's next.
 
 ## Privacy
 

@@ -355,17 +355,6 @@ body {
 	padding: 12px var(--wpd-pad-x) 14px;
 }
 
-.wpd-section__label {
-	display: block;
-	font-size: 11px;
-	font-weight: 500;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	color: var(--wpd-ink-dim);
-	margin-bottom: 8px;
-	padding: 0 2px;
-}
-
 .wpd-section__items {
 	display: flex;
 	flex-direction: column;
@@ -826,26 +815,6 @@ body {
 	letter-spacing: 0;
 }
 
-.wpd-siteinfo__row-tag {
-	font-size: 10px;
-	font-weight: 500;
-	text-transform: uppercase;
-	letter-spacing: 0.04em;
-	padding: 1px 6px;
-	border-radius: 999px;
-	background: var(--wpd-border);
-	color: var(--wpd-ink-dim);
-}
-
-/* The version pill sits on --wpd-border, which is light enough in dark mode
- * that --wpd-ink-dim text only reaches ~2.6:1; brighten the label to clear
- * WCAG AA (≥3:1) without darkening the pill (a shared border token). */
-@media (prefers-color-scheme: dark) {
-	.wpd-siteinfo__row-tag {
-		color: #bbbbbb;
-	}
-}
-
 .wpd-siteinfo__row-sub {
 	display: flex;
 	align-items: center;
@@ -932,18 +901,6 @@ body {
 }
 
 /* Info row (admin bar disabled hint) ----------------------------------- */
-
-.wpd-info-row {
-	padding: 12px 14px;
-	background: var(--wpds-color-bg-surface-info-weak, rgba(34, 113, 177, 0.08));
-	border: 1px solid var(--wpd-border);
-	border-radius: var(--wpd-radius);
-	font-size: 12px;
-	color: var(--wpd-ink-dim);
-	display: flex;
-	flex-direction: column;
-	gap: 4px;
-}
 
 .wpd-info-row__link {
 	color: var(--wpd-accent);
@@ -1044,6 +1001,10 @@ body {
 	padding: 28px var(--wpd-pad-x) 32px;
 	background: var(--wpd-surface);
 	margin: 0 auto;
+	/* EmptyState.Root ships max-width: 320px; without this override the surface
+	 * sits inset in the 380px popup and --wpd-bg shows through as a band in dark
+	 * mode, where every other view is full-bleed. */
+	max-width: none;
 }
 
 /* Loading & empty states ----------------------------------------------- */

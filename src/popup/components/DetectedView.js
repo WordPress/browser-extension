@@ -167,15 +167,32 @@ function WpAdminActions({ ctx, origin, baseUrl, url, user }) {
 	);
 }
 
+const IS_MAC = typeof navigator !== 'undefined' && navigator.platform?.startsWith('Mac');
+
+const MAC_GLYPHS = {
+	command: '⌘', cmd: '⌘',
+	alt: '⌥', option: '⌥',
+	ctrl: '⌃', control: '⌃', macctrl: '⌃',
+	shift: '⇧',
+};
+
+// Safari reports the raw "Alt+Shift+E" spelling on macOS, which reads as a
+// Windows binding there. Splitting on "+" rather than substring-replacing keeps
+// "MacCtrl" from being mangled into "Mac⌃", and leaves a value that is already
+// glyphs (Chrome's) untouched, since it has no "+" to split on.
+function toMacGlyphs(shortcut) {
+	return shortcut
+		.split('+')
+		.map((part) => MAC_GLYPHS[part.trim().toLowerCase()] ?? part.trim())
+		.join('');
+}
+
 // Live binding for the edit-this-page command. Users can rebind or clear it
-// at chrome://extensions/shortcuts, and commands.getAll() returns the current
-// binding already formatted for the platform (native ⌥⇧ glyphs on Mac, where
-// the manifest's "Alt" means the Option key). The static suggested-key hint
-// is only the fallback for when the API is unavailable (dev preview); a
-// binding the user cleared shows no hint rather than a false one.
+// at chrome://extensions/shortcuts. The static suggested-key hint is only the
+// fallback for when the API is unavailable (dev preview); a binding the user
+// cleared shows no hint rather than a false one.
 function useEditShortcutHint() {
-	const isMac = typeof navigator !== 'undefined' && navigator.platform?.startsWith('Mac');
-	const fallback = isMac ? '⌥⇧E' : 'Alt+Shift+E';
+	const fallback = IS_MAC ? '⌥⇧E' : 'Alt+Shift+E';
 	const [hint, setHint] = useState(fallback);
 	useEffect(() => {
 		let cancelled = false;
@@ -183,7 +200,9 @@ function useEditShortcutHint() {
 			chrome.commands?.getAll?.((commands) => {
 				if (cancelled || !Array.isArray(commands)) return;
 				const cmd = commands.find((c) => c.name === 'edit-this-page');
-				if (cmd) setHint(cmd.shortcut || null);
+				if (!cmd) return;
+				const shortcut = cmd.shortcut || null;
+				setHint(shortcut && IS_MAC ? toMacGlyphs(shortcut) : shortcut);
 			});
 		} catch (_) {
 			/* commands API unavailable — keep the suggested-key fallback */
