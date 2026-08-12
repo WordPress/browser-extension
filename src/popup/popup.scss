@@ -68,6 +68,12 @@ body {
  * matches body, so the popup reads as one continuous rounded card even where
  * the native frame is technically square underneath. */
 html {
+	/* Pin the outermost box too, not just body: Chrome recomputes the popup
+	 * window size when the body scrollbar appears (content passing the ~600px
+	 * clamp), and Chrome 151 can balloon the popup to roughly double width at
+	 * that re-measure. With html pinned, every box the sizing pass can read
+	 * says 380. */
+	width: var(--wpd-width);
 	background: var(--wpd-bg);
 	border-radius: var(--wpd-popup-radius, 12px);
 	overflow: hidden;
@@ -89,6 +95,12 @@ body {
 }
 
 #root {
+	/* Pinned, not fluid: when the body scrollbar appears, the client area
+	 * narrows by the bar's 10px, and a percentage-width column would reflow.
+	 * Pinning the column to the design width keeps every card exactly where
+	 * it was and lets the slim scrollbar overlay the right inset instead of
+	 * displacing content. The clipped 10px strip contains only padding. */
+	width: var(--wpd-width);
 	min-height: 140px;
 	animation: wpd-rise 0.24s cubic-bezier(0.2, 0.6, 0.2, 1);
 }
@@ -100,6 +112,37 @@ body {
 .wpd-scroll {
 	width: 100%;
 	overscroll-behavior: contain;
+}
+
+/* Slim floating scrollbar for the popup's own scrolling, replacing the native
+ * classic bar (a heavy full-height column at 380px wide). Track is invisible
+ * and reserves nothing while content fits; when scrollable, a thin inset pill
+ * appears. Styled on both scroll hosts: body (Chrome) and .wpd-scroll (the
+ * Safari popup lock's scroller). */
+body::-webkit-scrollbar,
+.wpd-scroll::-webkit-scrollbar {
+	width: 10px;
+}
+
+body::-webkit-scrollbar-track,
+.wpd-scroll::-webkit-scrollbar-track {
+	background: transparent;
+}
+
+body::-webkit-scrollbar-thumb,
+.wpd-scroll::-webkit-scrollbar-thumb {
+	/* 3px transparent border + padding-box clip floats a 4px pill off the
+	 * popup edge instead of docking a full-width bar against it. */
+	background: var(--wpd-border-strong);
+	background-clip: padding-box;
+	border: 3px solid transparent;
+	border-radius: 5px;
+}
+
+body::-webkit-scrollbar-thumb:hover,
+.wpd-scroll::-webkit-scrollbar-thumb:hover {
+	background: var(--wpd-ink-dim);
+	background-clip: padding-box;
 }
 
 .wpd-scroll__content {
