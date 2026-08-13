@@ -7,9 +7,19 @@ The current maintainer set, with affiliation disclosed.
 | [@jakemgold](https://github.com/jakemgold) | Jake Goldman | [Fueled](https://fueled.com/) (formerly [10up](https://10up.com/)) | Project originator; maintainer |
 | [@fabiankaegy](https://github.com/fabiankaegy) | Fabian Kägy | [Fueled](https://fueled.com/) (formerly [10up](https://10up.com/)) | Maintainer — React popup architecture, Safari companion, Site Information panel, Block Inspector |
 
+## Notable contributors
+
+Contributors whose sustained work has shaped the extension, beyond the maintainer set:
+
+| GitHub | Name | Contributions |
+|---|---|---|
+| [@itzmekhokan](https://github.com/itzmekhokan) | Khokan Sardar | A prolific community contributor since the project went public — Mobile Preview window reuse ([#67](https://github.com/WordPress/browser-extension/pull/67)), the meticulously verified QA pass on the 1.0 release candidate ([#76](https://github.com/WordPress/browser-extension/pull/76)), and a steady stream of reported-and-fixed issues across the popup, detection, and storage |
+
+The full picture lives in the [contributor graph](https://github.com/WordPress/browser-extension/graphs/contributors).
+
 ## Affiliation disclosure
 
-Both maintainers work at **[Fueled](https://fueled.com/)** (formerly **[10up](https://10up.com/)**) — a digital agency with a substantial WordPress practice. The extension was incubated independently and is hosted under the WordPress GitHub organization — community-branded, not Fueled-product-branded — so anyone in the WordPress community can contribute on equal footing.
+The maintainers — Jake Goldman, the project's lead and originator, and Fabian Kägy, its most significant architectural contributor — both work at **[Fueled](https://fueled.com/)** (formerly **[10up](https://10up.com/)**), a digital agency with a substantial WordPress practice. The extension was incubated independently and is hosted under the WordPress GitHub organization — community-branded, not Fueled-product-branded — so anyone in the WordPress community can contribute on equal footing.
 
 Decisions are made on the merits in public threads (Issues, Discussions, PR review). No private channel takes precedence over public discussion.
 
