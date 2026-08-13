@@ -20,8 +20,8 @@ A few extras follow naturally from sitting at the browser level instead of insid
   <a href="screenshots/admin-bar-toggle.gif"><img src="screenshots/admin-bar-toggle.gif" alt="The admin bar hidden and restored from the browser toolbar on a live WordPress site, with the page reflowing to the exact view a visitor sees"></a>
 </p>
 <p align="center">
-  <a href="screenshots/block-outlines-safari.png"><img src="screenshots/block-outlines-safari.png" width="49%" alt="Highlight Blocks outlining template parts, navigation, and content blocks over a live page, with the popup's Developer Tools section open in Safari"></a>
-  <a href="screenshots/my-sites-safari.png"><img src="screenshots/my-sites-safari.png" width="49%" alt="Popup on a logged-out WordPress site in Safari — version detected, log in shortcuts, and the My Sites launcher with three saved sites and their icons"></a>
+  <a href="screenshots/block-outlines-safari.png"><img src="screenshots/block-outlines-safari.png" width="49%" align="middle" alt="Highlight Blocks outlining template parts, navigation, and content blocks over a live page, with the popup's Developer Tools section open in Safari"></a>
+  <a href="screenshots/my-sites-safari.png"><img src="screenshots/my-sites-safari.png" width="49%" align="middle" alt="Popup on a logged-out WordPress site in Safari — version detected, log in shortcuts, and the My Sites launcher with three saved sites and their icons"></a>
 </p>
 
 ## Status
@@ -34,7 +34,7 @@ No telemetry, no analytics, no third-party tracking. The extension does its work
 
 ## Install
 
-**From the stores (recommended):**
+### From the stores (recommended)
 
 - **Chrome / Chromium**: install from the [Chrome Web Store](https://chromewebstore.google.com/detail/wordpress-browser-extensi/apaakgfongbkeecchhhjocpgjchbdenl)
 - **Safari (macOS)**: install from the [Mac App Store](https://apps.apple.com/app/id6794460913), launch the app once, then enable the extension in **Safari → Settings → Extensions**
