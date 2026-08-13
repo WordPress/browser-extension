@@ -7,7 +7,7 @@
 
 <p>
   <a href="https://chromewebstore.google.com/detail/wordpress-browser-extensi/apaakgfongbkeecchhhjocpgjchbdenl"><img src=".github/store-badges/chrome-web-store.png" height="50" alt="Available in the Chrome Web Store"></a>
-  <a href="https://apps.apple.com/app/id6794460913"><img src=".github/store-badges/app-store.png" height="50" alt="Download on the App Store"></a>
+  <a href="https://apps.apple.com/app/id6794460913"><img src=".github/store-badges/mac-app-store.png" height="50" alt="Download on the Mac App Store"></a>
 </p>
 
 WordPress's admin bar is convenient — *Edit Post*, the jump-to-admin link, a few plugin add-ons — but it lives inside the website's viewport. That gets in the way when you're checking how a site behaves for a logged-out visitor, especially with sticky navigation, parallax, or designs that key off the full browser height (`100vh` layouts, raindrop scroll effects, anything immersive). The standard workaround, turning the admin bar off in your user profile, fixes the visual interference, but then quick access to wp-admin and content editing becomes a chore.
