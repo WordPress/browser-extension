@@ -17,17 +17,11 @@ Plugins layer their own items onto the admin bar too. For most everyday work, *E
 A few extras follow naturally from sitting at the browser level instead of inside the site. It identifies whether the current webpage is powered by WordPress (and, where the signals allow, which managed host it's on), provides a one-click log-in shortcut, and packages developer tools (mobile preview, cache bypass, cookies/site-data clear, block highlighter) that are genuinely cleaner as a browser overlay than as in-site UI.
 
 <p align="center">
-  <img src="screenshots/my-sites.png" width="400" alt="Logged in on a WordPress site — Edit Page, WordPress Admin, Show Admin Bar toggle, +New and Developer Tools accordions, and the My Sites launcher expanded with three saved sites and their site icons">
+  <a href="screenshots/admin-bar-toggle.gif"><img src="screenshots/admin-bar-toggle.gif" alt="The admin bar hidden and restored from the browser toolbar on a live WordPress site, with the page reflowing to the exact view a visitor sees"></a>
 </p>
 <p align="center">
-  <img src="screenshots/dev-tools.png" width="380" alt="Developer Tools expanded — Highlight Blocks toggle, Mobile Preview, Bypass Page Cache, Query Monitor, Clear Site Data">
-  <img src="screenshots/wp-admin.png" width="380" alt="wp-admin editor — View Post, Visit Site, WordPress Admin, Log Out">
-</p>
-<p align="center">
-  <img src="screenshots/logged-out.png" width="380" alt="Logged out on a WordPress site — version detected, Log In / Log In Return to Page actions">
-</p>
-<p align="center">
-  <img src="screenshots/safari.png" width="600" alt="Safari companion build — same popup running natively in Safari on macOS">
+  <a href="screenshots/block-outlines-safari.png"><img src="screenshots/block-outlines-safari.png" width="49%" alt="Highlight Blocks outlining template parts, navigation, and content blocks over a live page, with the popup's Developer Tools section open in Safari"></a>
+  <a href="screenshots/my-sites-safari.png"><img src="screenshots/my-sites-safari.png" width="49%" alt="Popup on a logged-out WordPress site in Safari — version detected, log in shortcuts, and the My Sites launcher with three saved sites and their icons"></a>
 </p>
 
 ## Status
