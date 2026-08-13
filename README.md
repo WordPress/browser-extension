@@ -5,6 +5,11 @@
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![PRs welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
 
+<p>
+  <a href="https://chromewebstore.google.com/detail/wordpress-browser-extensi/apaakgfongbkeecchhhjocpgjchbdenl"><img src=".github/store-badges/chrome-web-store.png" height="50" alt="Available in the Chrome Web Store"></a>
+  <a href="https://apps.apple.com/app/id6794460913"><img src=".github/store-badges/app-store.svg" height="50" alt="Download on the App Store"></a>
+</p>
+
 WordPress's admin bar is convenient — *Edit Post*, the jump-to-admin link, a few plugin add-ons — but it lives inside the website's viewport. That gets in the way when you're checking how a site behaves for a logged-out visitor, especially with sticky navigation, parallax, or designs that key off the full browser height (`100vh` layouts, raindrop scroll effects, anything immersive). The standard workaround, turning the admin bar off in your user profile, fixes the visual interference, but then quick access to wp-admin and content editing becomes a chore.
 
 Plugins layer their own items onto the admin bar too. For most everyday work, *Edit this page*, *jump to admin*, and a handful of host or developer shortcuts cover 80-90% of what most site managers reach for. This extension moves those out of the viewport entirely and into the browser toolbar, leaving the admin bar available when needed, out of the way when it's not.
@@ -27,7 +32,7 @@ A few extras follow naturally from sitting at the browser level instead of insid
 
 ## Status
 
-**[v1.0.0-rc2](https://github.com/WordPress/browser-extension/releases/tag/v1.0.0-rc2) — current release candidate, in production use.** Testers should start with the newest release candidate; install steps for Chrome and Safari are in the release notes. The latest stable release is [v0.11.2](https://github.com/WordPress/browser-extension/releases/tag/v0.11.2), which GitHub marks "Latest" because release candidates are published as pre-releases. The v0.11.x store-readiness phase is complete: permissions audited against least-privilege with per-entry rationale in [`SECURITY.md`](SECURITY.md), the packaged Chrome build dropping the redundant `activeTab` ([#61](https://github.com/WordPress/browser-extension/issues/61)), a published privacy policy, and correctness linting gating CI. The v1.0 milestone is the initial official directory releases on the **Chrome Web Store** and **Safari / Mac App Store** under the WordPress publisher account; Safari store-readiness is the remaining gate. Firefox and Edge follow post-1.0. See [`ROADMAP.md`](ROADMAP.md) for what's locked, what's open, and what's next.
+**v1.0 launched.** The extension is available on the [**Chrome Web Store**](https://chromewebstore.google.com/detail/wordpress-browser-extensi/apaakgfongbkeecchhhjocpgjchbdenl) for Chrome and Chromium browsers and on the [**Mac App Store**](https://apps.apple.com/app/id6794460913) for Safari on macOS, published by the WordPress Foundation. The current release is [v1.0.1](https://github.com/WordPress/browser-extension/releases/tag/v1.0.1). Permissions are audited against least-privilege with per-entry rationale in [`SECURITY.md`](SECURITY.md) (the packaged Chrome build drops the redundant `activeTab`, [#61](https://github.com/WordPress/browser-extension/issues/61)), the privacy policy is published, and correctness linting gates CI. Firefox and Edge directories are under consideration next; see [`ROADMAP.md`](ROADMAP.md) for what's locked, what's open, and what's ahead.
 
 ## Privacy
 
@@ -35,14 +40,21 @@ No telemetry, no analytics, no third-party tracking. The extension does its work
 
 ## Install
 
-### Chrome (developer install, pre-store-release)
+**From the stores (recommended):**
+
+- **Chrome / Chromium**: install from the [Chrome Web Store](https://chromewebstore.google.com/detail/wordpress-browser-extensi/apaakgfongbkeecchhhjocpgjchbdenl)
+- **Safari (macOS)**: install from the [Mac App Store](https://apps.apple.com/app/id6794460913), launch the app once, then enable the extension in **Safari → Settings → Extensions**
+
+Store installs are fully signed and update automatically. The options below are for development and testing.
+
+### Chrome (load unpacked)
 
 1. Download the latest zip from [Releases](https://github.com/WordPress/browser-extension/releases)
 2. Unzip to a folder
 3. Open `chrome://extensions`, enable **Developer mode**
 4. Click **Load unpacked** and select the unzipped folder
 
-### Safari (ad-hoc signed, pre-store-release)
+### Safari (ad-hoc signed)
 
 1. Download the latest `…-safari.zip` from [Releases](https://github.com/WordPress/browser-extension/releases) and unzip
 2. Drag **WordPress Browser Extension.app** to Applications
