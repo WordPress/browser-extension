@@ -135,8 +135,11 @@
     const docOrigin = options.origin
       || (doc.defaultView && doc.defaultView.location && doc.defaultView.location.origin)
       || null;
+    const docPathname = options.pathname
+      || (doc.defaultView && doc.defaultView.location && doc.defaultView.location.pathname)
+      || null;
     if (docOrigin && docOrigin !== 'null') {
-      result.context.baseUrl = deriveBaseUrl(docOrigin, result.context.restApiRoot);
+      result.context.baseUrl = deriveBaseUrl(docOrigin, result.context.restApiRoot, docPathname);
     }
 
     // --- Medium signal: generator meta tag ---
@@ -294,9 +297,24 @@
    * "Site Address"). They're identical in the standard subdirectory install
    * this fixes; the rarer "give WordPress its own directory" split, where
    * they diverge, is intentionally out of scope.
+   *
+   * wp-admin fallback (#88): the REST discovery link is a front-end signal —
+   * admin screens never emit it — so on wp-admin pages the REST-based path
+   * is unavailable and the base would silently collapse to the bare origin,
+   * breaking every synthesized link on subdirectory installs (Visit Site on
+   * a multi-segment install like example.com/en-us/research sent users to
+   * the bare origin). wp-admin always hangs directly off the install base,
+   * so the page's own pathname carries the answer: everything before
+   * /wp-admin is the base.
    */
-  function deriveBaseUrl(origin, restApiRoot) {
-    if (!restApiRoot) return origin;
+  function deriveBaseUrl(origin, restApiRoot, pathname) {
+    if (!restApiRoot) {
+      if (pathname && typeof pathname === 'string') {
+        const m = pathname.match(/^(.*?)\/wp-admin(\/|$)/);
+        if (m && m[1]) return `${origin}${m[1]}`;
+      }
+      return origin;
+    }
     try {
       const originUrl = new URL(origin);
       const rootUrl = new URL(restApiRoot, originUrl);

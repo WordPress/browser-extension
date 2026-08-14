@@ -20,7 +20,7 @@
 
   // -- Detection + reporting -----------------------------------------------
 
-  const detection = globalThis.WPDetect.detectWordPress(document, { origin: location.origin });
+  const detection = globalThis.WPDetect.detectWordPress(document, { origin: location.origin, pathname: location.pathname });
   if (!detection.context.isLoggedIn) {
     detection.context.isLoggedIn =
       globalThis.WPDetect.detectLoggedInFromCookies(document.cookie);
@@ -194,7 +194,7 @@
       // Re-run detection on demand. The IIFE-scope `detection` captured at
       // document_idle goes stale when the user logs in elsewhere and returns
       // to a BFCache'd or page-cached version of this URL.
-      const fresh = globalThis.WPDetect.detectWordPress(document, { origin: location.origin });
+      const fresh = globalThis.WPDetect.detectWordPress(document, { origin: location.origin, pathname: location.pathname });
       if (!fresh.context.isLoggedIn) {
         fresh.context.isLoggedIn =
           globalThis.WPDetect.detectLoggedInFromCookies(document.cookie);

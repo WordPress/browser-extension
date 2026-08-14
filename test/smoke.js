@@ -1177,6 +1177,53 @@ async function main() {
     assert(parse('x'.repeat(2 * 1024 * 1024 + 1)).length === 0, 'oversized input returns no blocks');
   }
 
+  // --- 42. baseUrl from the wp-admin pathname when no REST link (#88) -----
+  {
+    console.log('\n[42] wp-admin pages derive baseUrl from their own pathname');
+    // Admin screens never emit the REST discovery link, so the pathname
+    // prefix before /wp-admin is the only base signal available there.
+    const adminDom = new JSDOM(`
+      <html><head></head><body class="wp-admin wp-core-ui">
+        <div id="wpadminbar"></div>
+      </body></html>
+    `);
+    const adminCtx = loadModules(adminDom);
+    const multi = adminCtx.WPDetect.detectWordPress(adminCtx.document, {
+      origin: 'https://www.example.com',
+      pathname: '/en-us/research/wp-admin/index.php',
+    });
+    assert(multi.context.baseUrl === 'https://www.example.com/en-us/research',
+      `multi-segment admin base = ${multi.context.baseUrl}`);
+
+    const root = adminCtx.WPDetect.detectWordPress(adminCtx.document, {
+      origin: 'https://www.example.com',
+      pathname: '/wp-admin/index.php',
+    });
+    assert(root.context.baseUrl === 'https://www.example.com',
+      `root-install admin base stays bare origin (${root.context.baseUrl})`);
+
+    const bare = adminCtx.WPDetect.detectWordPress(adminCtx.document, {
+      origin: 'https://www.example.com',
+      pathname: '/en-us/research/some-page/',
+    });
+    assert(bare.context.baseUrl === 'https://www.example.com',
+      `non-admin page without REST link keeps bare origin (${bare.context.baseUrl})`);
+
+    // A REST discovery link still wins over the pathname heuristic.
+    const restDom = new JSDOM(`
+      <html><head>
+        <link rel="https://api.w.org/" href="https://www.example.com/en-us/research/wp-json/">
+      </head><body class="home"></body></html>
+    `);
+    const restCtx = loadModules(restDom);
+    const rest = restCtx.WPDetect.detectWordPress(restCtx.document, {
+      origin: 'https://www.example.com',
+      pathname: '/en-us/research/',
+    });
+    assert(rest.context.baseUrl === 'https://www.example.com/en-us/research',
+      `REST-derived base unchanged (${rest.context.baseUrl})`);
+  }
+
   console.log(`\n${failures === 0 ? 'All tests passed.' : failures + ' failure(s).'}`);
   process.exit(failures === 0 ? 0 : 1);
 }
