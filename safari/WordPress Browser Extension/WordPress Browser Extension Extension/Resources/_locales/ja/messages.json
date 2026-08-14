@@ -1,0 +1,431 @@
+{
+  "ext_name": {
+    "message": "WordPress ブラウザー拡張機能",
+    "description": "Extension name shown in browser UI"
+  },
+  "ext_short_name": {
+    "message": "WordPress",
+    "description": "Short name shown where space is limited"
+  },
+  "ext_description": {
+    "message": "WordPress サイトへのクイックアクセス、コンテンツ編集、開発者向けツール。管理バーを非表示にします。",
+    "description": "Extension description shown in the browser's extension store and management pages. The Chrome Web Store shows it as the listing summary and enforces a 132-character limit."
+  },
+  "ext_action_title": {
+    "message": "WordPress ブラウザー拡張機能",
+    "description": "Tooltip for the toolbar icon button"
+  },
+  "cmd_edit_this_page": {
+    "message": "WordPress で本ページを編集する",
+    "description": "Description for the keyboard shortcut command"
+  },
+
+  "options_page_title": {
+    "message": "WordPress ブラウザー拡張機能 — オプション",
+    "description": "HTML page title for the options page"
+  },
+  "options_heading": {
+    "message": "WordPress ブラウザー拡張機能",
+    "description": "H1 heading on the options page"
+  },
+  "options_subtitle": {
+    "message": "ブラウザー全体のデフォルト設定。サイトごとの設定は、引き続きツールバーのポップアップメニューから操作できます。",
+    "description": "Subtitle under the options page heading"
+  },
+  "options_admin_bar_section": {
+    "message": "管理バー",
+    "description": "Section heading for admin bar settings"
+  },
+  "options_hide_admin_bar_label": {
+    "message": "デフォルトで管理バーを非表示にする",
+    "description": "Toggle label for the hide-admin-bar option"
+  },
+  "options_hide_admin_bar_hint": {
+    "message": "本機能を有効にすると、新しい WordPress サイトでは管理バーは非表示の状態から開始されます。ポップアップ内のサイトごとの設定は、引き続き優先されます。",
+    "description": "Hint text describing the hide-admin-bar toggle behavior"
+  },
+  "options_experimental_section": {
+    "message": "実験的",
+    "description": "Section heading for experimental features"
+  },
+  "options_site_info_label": {
+    "message": "サイト情報パネルを表示する",
+    "description": "Toggle label for the site information panel option"
+  },
+  "options_site_info_hint": {
+    "message": "ポップアップにパネルを追加し、現在有効なテーマ、インストール済みのプラグイン、サイト名、および REST 名前空間を表示します。検出はヒューリスティック方式です — asset パスの推論により、重複や誤検出 (たとえば mu-plugins や drop-ins) が発生する可能性があります。デフォルトでは無効になっています。",
+    "description": "Hint text describing the site information panel feature"
+  },
+  "options_data_section": {
+    "message": "データ",
+    "description": "Section heading for data management settings"
+  },
+  "options_reset_label": {
+    "message": "拡張機能データをリセットする",
+    "description": "Label for the reset/clear data option"
+  },
+  "options_reset_hint": {
+    "message": "サイトごとに保存された設定、本ページのグローバルなデフォルト設定、およびキャッシュされた \"これは WordPress サイトですか\" の結果をすべてクリアします。テストや、最初からやり直す際に便利です。",
+    "description": "Hint text describing what the reset action clears"
+  },
+  "options_clear_button": {
+    "message": "すべてのデータを消去する",
+    "description": "Button label to trigger clearing all extension data"
+  },
+  "options_clear_confirm": {
+    "message": "すべての拡張機能データを削除しますか ?\n\nこれにより、サイトごとに保存された設定、このページの設定されたグローバルなデフォルト値、キャッシュされた WordPress 検出結果、および保存済みの「マイサイト」リストがすべて削除されます。この操作は元に戻せません。",
+    "description": "Confirmation dialog text shown before clearing all data"
+  },
+  "options_cleared_success": {
+    "message": "完了。",
+    "description": "Status message shown after successfully clearing extension data"
+  },
+  "options_cleared_error": {
+    "message": "データを消去できませんでした。もう一度お試しください。",
+    "description": "Status message shown when clearing extension data fails"
+  },
+
+  "toolbar_title_detected": {
+    "message": "WordPress が検出されました",
+    "description": "Toolbar icon tooltip when a WordPress site is detected but the user is not logged in"
+  },
+  "toolbar_title_detected_logged_in": {
+    "message": "WordPress が検出されました — ログイン済み",
+    "description": "Toolbar icon tooltip when a WordPress site is detected and the user is logged in"
+  },
+  "toolbar_title_default": {
+    "message": "WordPress ブラウザー拡張機能",
+    "description": "Default toolbar icon tooltip when no WordPress site is detected"
+  },
+  "admin_bar_hidden_notice": {
+    "message": "本サイトでは [WordPress ブラウザー拡張機能] 管理バーが非表示になっています。拡張機能のポップアップまたはオプションページで、\"管理バーを表示\" を切り替えてください。",
+    "description": "Console info message shown when the admin bar is hidden on a site"
+  },
+
+  "error_view_title": {
+    "message": "何か問題が発生しました",
+    "description": "Title shown in the popup error state"
+  },
+  "error_view_description": {
+    "message": "サービスワーカーのログを確認します。",
+    "description": "Description shown in the popup error state"
+  },
+  "not_supported_title": {
+    "message": "ここには調査すべき点はありません",
+    "description": "Title shown when the current tab cannot be inspected (e.g. new tab, browser pages)"
+  },
+  "not_supported_description": {
+    "message": "まずは Web サイトを開いてみましょう。",
+    "description": "Description shown when the current tab cannot be inspected"
+  },
+  "not_wordpress_title": {
+    "message": "WordPress サイトではありません",
+    "description": "Title shown when the current site is not detected as WordPress"
+  },
+  "not_wordpress_description": {
+    "message": "シグナルは検出されませんでした。",
+    "description": "Description shown when the current site is not detected as WordPress"
+  },
+
+  "verb_view": {
+    "message": "表示する",
+    "description": "Verb prefix for viewing a published post/page from the WP admin edit screen"
+  },
+  "verb_preview": {
+    "message": "プレビューする",
+    "description": "Verb prefix for previewing a draft post/page from the WP admin edit screen"
+  },
+  "visit_site": {
+    "message": "サイトを訪問する",
+    "description": "Button label to visit the WordPress site's frontend"
+  },
+  "wordpress_admin": {
+    "message": "WordPress 管理画面",
+    "description": "Button label to open the WordPress admin dashboard"
+  },
+  "log_in": {
+    "message": "ログインする",
+    "description": "Button label to log into a WordPress site"
+  },
+  "log_in_return": {
+    "message": "ログインし、ページに戻る",
+    "description": "Button label to log in and return to the current page"
+  },
+  "show_admin_bar": {
+    "message": "管理バーを表示する",
+    "description": "Toggle label to show/hide the WordPress admin bar"
+  },
+  "admin_bar_disabled_info": {
+    "message": "プロフィールまたはテーマの設定により、管理バーが無効になっているため、本拡張機能の機能が制限されているようです。",
+    "description": "Info text shown when the admin bar cannot be toggled due to profile or theme settings"
+  },
+  "check_profile_link": {
+    "message": "プロフィールを確認する →",
+    "description": "Link text directing users to their WordPress profile settings"
+  },
+
+  "copy_url_label": {
+    "message": "URL をコピーする",
+    "description": "Aria-label and tooltip for the copy URL button"
+  },
+  "copied_label": {
+    "message": "コピーしました",
+    "description": "Aria-label and tooltip for the copy URL button after the URL has been copied"
+  },
+  "open_new_tab_label": {
+    "message": "新しいタブで開く",
+    "description": "Aria-label and tooltip for the open-in-new-tab button"
+  },
+
+  "account_menu_label": {
+    "message": "「アカウント」メニュー",
+    "description": "Aria-label for the user account menu button when no display name is available"
+  },
+  "account_menu_for_user": {
+    "message": "$NAME$ の「アカウント」メニュー",
+    "description": "Aria-label for the user account menu button when a display name is available",
+    "placeholders": {
+      "name": { "content": "$1" }
+    }
+  },
+  "profile_menu_item": {
+    "message": "プロフィール",
+    "description": "Menu item linking to the user's WordPress profile"
+  },
+  "gravatar_menu_item": {
+    "message": "Gravatar",
+    "description": "Menu item linking to the user's Gravatar profile"
+  },
+  "log_out_button": {
+    "message": "ログアウトする",
+    "description": "Button label to log out of the WordPress site"
+  },
+  "confirm_click_button": {
+    "message": "もう一度クリックして確認してください",
+    "description": "Button label shown after first click on a destructive action, prompting a second confirmation click"
+  },
+  "super_admin_role": {
+    "message": "特権管理者",
+    "description": "Role badge label for WordPress multisite super administrators"
+  },
+
+  "new_content_label": {
+    "message": "新規",
+    "description": "Section label for the 'New content' action group in the popup"
+  },
+
+  "dev_tools_label": {
+    "message": "開発者ツール",
+    "description": "Section label for the developer tools group in the popup"
+  },
+  "highlight_blocks_toggle": {
+    "message": "ブロックを強調表示する",
+    "description": "Toggle label for the block highlighter developer tool"
+  },
+  "mobile_preview_action": {
+    "message": "モバイル・プレビュー",
+    "description": "Action label to open the site in mobile preview mode"
+  },
+  "bypass_page_cache_action": {
+    "message": "ページキャッシュをバイパスする",
+    "description": "Action label to reload the page bypassing the server-side page cache"
+  },
+  "query_monitor_toggle": {
+    "message": "クエリー・モニター",
+    "description": "Toggle label for the Query Monitor plugin panel"
+  },
+  "clear_site_data_action": {
+    "message": "サイトデータを消去 (ログイン状態を維持)",
+    "description": "Action label to clear browser site data while preserving the login session"
+  },
+
+  "confirm_label": {
+    "message": "確認する",
+    "description": "Default label for inline confirmation buttons"
+  },
+
+  "site_info_label": {
+    "message": "サイト情報",
+    "description": "Section label for the site information panel"
+  },
+  "site_info_loading": {
+    "message": "サイト情報のロード中…",
+    "description": "Aria-live status text while site information is being fetched"
+  },
+  "active_theme_label": {
+    "message": "有効なテーマ",
+    "description": "Label for the active theme row in the site information panel"
+  },
+  "plugins_label": {
+    "message": "プラグイン",
+    "description": "Section label for the plugins group when the count is zero or unknown"
+  },
+  "plugins_with_count": {
+    "message": "プラグイン ($COUNT$)",
+    "description": "Section label for plugins when the total count is known from REST",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "detected_plugins_with_count": {
+    "message": "検出されたプラグイン ($COUNT$)",
+    "description": "Section label for plugins detected via DOM asset paths when REST count is unavailable",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "login_for_plugin_list": {
+    "message": "ログインすると、追加情報を含むプラグインの完全なリストをご覧いただけます。",
+    "description": "Hint shown in the plugins section when the user is logged out"
+  },
+  "nothing_detected": {
+    "message": "追加で検出されたものは、特にありませんでした。",
+    "description": "Hint shown when no additional site information could be detected"
+  },
+  "login_for_info": {
+    "message": "ログインして、詳細情報をご覧ください。",
+    "description": "Hint shown in the theme section when the user is logged out"
+  },
+
+  "update_singular": {
+    "message": "$COUNT$ 件の更新",
+    "description": "Status badge label for a single pending WordPress update",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "update_plural": {
+    "message": "$COUNT$ 件の更新",
+    "description": "Status badge label for multiple pending WordPress updates",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "pending_comment_singular": {
+    "message": "$COUNT$ 件の保留中のコメント",
+    "description": "Status badge label for a single comment awaiting moderation",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "pending_comment_plural": {
+    "message": "$COUNT$ 件の保留中のコメント",
+    "description": "Status badge label for multiple comments awaiting moderation",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+
+  "edit_category": {
+    "message": "カテゴリを編集する",
+    "description": "Edit action label when viewing a category archive"
+  },
+  "edit_tag": {
+    "message": "タグを編集する",
+    "description": "Edit action label when viewing a tag archive"
+  },
+  "edit_term": {
+    "message": "タームを編集する",
+    "description": "Edit action label when viewing a taxonomy term archive"
+  },
+  "edit_author": {
+    "message": "投稿者を編集する",
+    "description": "Edit action label when viewing an author archive"
+  },
+  "edit_page_fallback": {
+    "message": "ページを編集する",
+    "description": "Fallback edit action label when the post type cannot be determined"
+  },
+  "edit_term_not_resolvable": {
+    "message": "タームを編集する (未解決)",
+    "description": "Disabled edit action label when the term cannot be resolved to an edit URL"
+  },
+  "edit_author_not_resolvable": {
+    "message": "投稿者を編集する (未解決)",
+    "description": "Disabled edit action label when the author cannot be resolved to an edit URL"
+  },
+  "nothing_to_edit": {
+    "message": "編集する箇所はありません",
+    "description": "Disabled edit action label for pages with no editable content (e.g. search results, 404)"
+  },
+  "edit_post_type": {
+    "message": "$TYPE$ を編集する",
+    "description": "Edit action label prefixed with the post type name (e.g. 'Edit Post', 'Edit Page')",
+    "placeholders": {
+      "type": { "content": "$1" }
+    }
+  },
+
+  "post_type_post": {
+    "message": "投稿",
+    "description": "Display name for the 'post' post type"
+  },
+  "post_type_page": {
+    "message": "ページ",
+    "description": "Display name for the 'page' post type"
+  },
+  "post_type_media": {
+    "message": "メディア",
+    "description": "Display name for the 'attachment' post type"
+  },
+  "post_type_block_pattern": {
+    "message": "ブロックパターン",
+    "description": "Display name for the 'wp_block' post type (reusable blocks)"
+  },
+  "post_type_template": {
+    "message": "テンプレート",
+    "description": "Display name for the 'wp_template' post type"
+  },
+  "post_type_template_part": {
+    "message": "テンプレートパーツ",
+    "description": "Display name for the 'wp_template_part' post type"
+  },
+  "post_type_navigation_menu": {
+    "message": "ナビゲーションメニュー",
+    "description": "Display name for the 'wp_navigation' post type"
+  },
+  "my_sites_label": {
+    "message": "マイサイト",
+    "description": "Header for the saved-sites launcher section"
+  },
+  "my_sites_edit": {
+    "message": "編集する",
+    "description": "Toggle that reveals rename/remove controls in the My Sites list"
+  },
+  "my_sites_done": {
+    "message": "完了",
+    "description": "Toggle that exits edit mode in the My Sites list"
+  },
+  "my_sites_remove": {
+    "message": "サイトを削除する",
+    "description": "Button that removes a site from the My Sites list"
+  },
+  "my_sites_rename_placeholder": {
+    "message": "カスタム名",
+    "description": "Placeholder/label for the rename field in the My Sites list"
+  },
+  "host_local_dev": {
+    "message": "ローカル開発環境",
+    "description": "Host badge label for a local development environment (the other host labels are brand names and are not translated)"
+  },
+  "edit_blog_template": {
+    "message": "ブログテンプレートを編集する",
+    "description": "Edit action label on the blog posts index (block theme) — opens the site editor"
+  },
+  "edit_archive_template": {
+    "message": "アーカイブテンプレートを編集する",
+    "description": "Edit action label on an archive view (block theme) — opens the site editor"
+  },
+  "edit_unavailable_classic": {
+    "message": "編集できません (Classic テーマ)",
+    "description": "Disabled edit label on a template-backed view when the theme is classic (templates are PHP files)"
+  },
+  "edit_template_not_found": {
+    "message": "テンプレートが見つかりません",
+    "description": "Disabled edit label when the block theme has no template matching the current view"
+  },
+  "edit_unavailable": {
+    "message": "編集できません",
+    "description": "Disabled edit label on a template-backed view when block-theme status can't be determined"
+  }
+}
