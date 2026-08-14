@@ -124,6 +124,23 @@
   }
 
   /**
+   * Same-origin http(s) guard for DOM-sourced page links with no required
+   * path shape — used for the admin bar's Visit Site href, whose target
+   * (home_url) can be any path on the origin. Stricter shape guards exist
+   * for admin and logout URLs above and below.
+   */
+  function isSameOriginPageUrl(href, origin) {
+    if (!href || !origin) return false;
+    try {
+      const u = new URL(href);
+      const safeProtocol = u.protocol === 'http:' || u.protocol === 'https:';
+      return safeProtocol && u.origin === origin;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  /**
    * Same-origin WordPress logout guard for the admin bar's logout href. We
    * only trust that href to skip WP's "are you sure?" confirm (it carries the
    * `_wpnonce`); a spoofed admin bar could otherwise point logout at an
@@ -651,6 +668,7 @@
     fetchRawContent,
     findNonceInDocument,
     isSameOriginAdminUrl,
+    isSameOriginPageUrl,
     isSameOriginLogoutUrl,
   };
 })();

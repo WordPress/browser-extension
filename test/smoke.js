@@ -1177,6 +1177,80 @@ async function main() {
     assert(parse('x'.repeat(2 * 1024 * 1024 + 1)).length === 0, 'oversized input returns no blocks');
   }
 
+  // --- 42. baseUrl from the wp-admin pathname when no REST link (#88) -----
+  {
+    console.log('\n[42] admin documents derive baseUrl from their own pathname');
+    const ORIGIN = 'https://www.example.com';
+    // Admin screens never emit the REST discovery link; the pathname prefix
+    // before the final boundary-delimited /wp-admin segment is the base.
+    // The fallback is gated on body.wp-admin, which admin_body_class prints
+    // on every core admin screen and never on the front end.
+    const adminDom = new JSDOM(`
+      <html><head></head><body class="wp-admin wp-core-ui">
+        <div id="wpadminbar">
+          <li id="wp-admin-bar-view-site"><a href="https://www.example.com/en-us/research/">Visit Site</a></li>
+        </div>
+      </body></html>
+    `);
+    const adminCtx = loadModules(adminDom);
+    const adminBase = (pathname) => adminCtx.WPDetect.detectWordPress(
+      adminCtx.document, { origin: ORIGIN, pathname },
+    ).context.baseUrl;
+
+    assert(adminBase('/subdir/wp-admin/index.php') === `${ORIGIN}/subdir`,
+      'subdirectory admin page');
+    assert(adminBase('/subdir/wp-admin') === `${ORIGIN}/subdir`,
+      'admin URL without trailing slash');
+    assert(adminBase('/wp-admin/index.php') === ORIGIN,
+      'root install stays bare origin');
+    assert(adminBase('/wp-admin/wp-admin/index.php') === `${ORIGIN}/wp-admin`,
+      'install based literally at /wp-admin');
+    assert(adminBase('/alpha/wp-admin/tools/wp-admin/index.php') === `${ORIGIN}/alpha/wp-admin/tools`,
+      'final boundary-delimited /wp-admin wins over earlier occurrences');
+    assert(adminBase('/en-us/research/wp-admin/index.php') === `${ORIGIN}/en-us/research`,
+      'multi-segment install base (#88 reported shape)');
+    assert(adminBase('/sub///wp-admin/index.php') === `${ORIGIN}/sub`,
+      'consecutive separators leave no trailing slash run on the base');
+    assert(adminBase('/sub%2Fdir/wp-admin/index.php') === ORIGIN,
+      'encoded slash fails closed to the origin');
+    assert(adminBase('/sub%2fdir/wp-admin/index.php') === ORIGIN,
+      'lowercase encoded slash fails closed too');
+    assert(adminBase('relative/wp-admin/') === ORIGIN,
+      'non-rooted pathname fails closed to the origin');
+
+    // Visit Site capture rides along on admin screens.
+    const cap = adminCtx.WPDetect.detectWordPress(adminCtx.document, {
+      origin: ORIGIN, pathname: '/en-us/research/wp-admin/index.php',
+    });
+    assert(cap.context.adminBarVisitSiteHref === 'https://www.example.com/en-us/research/',
+      'admin bar Visit Site href captured');
+
+    // A public permalink whose slug path contains /wp-admin/ is NOT an
+    // admin document: no body.wp-admin, no REST link → bare origin.
+    const permalinkDom = new JSDOM(`
+      <html><head></head><body class="single single-post"></body></html>
+    `);
+    const permalinkCtx = loadModules(permalinkDom);
+    const permalink = permalinkCtx.WPDetect.detectWordPress(permalinkCtx.document, {
+      origin: ORIGIN, pathname: '/guides/wp-admin/security/',
+    });
+    assert(permalink.context.baseUrl === ORIGIN,
+      `public permalink containing /wp-admin/ keeps bare origin (${permalink.context.baseUrl})`);
+
+    // A REST discovery link stays authoritative, including on admin docs.
+    const restDom = new JSDOM(`
+      <html><head>
+        <link rel="https://api.w.org/" href="https://www.example.com/en-us/research/wp-json/">
+      </head><body class="wp-admin"></body></html>
+    `);
+    const restCtx = loadModules(restDom);
+    const rest = restCtx.WPDetect.detectWordPress(restCtx.document, {
+      origin: ORIGIN, pathname: '/somewhere/else/wp-admin/',
+    });
+    assert(rest.context.baseUrl === 'https://www.example.com/en-us/research',
+      `REST-derived base wins over the pathname (${rest.context.baseUrl})`);
+  }
+
   console.log(`\n${failures === 0 ? 'All tests passed.' : failures + ' failure(s).'}`);
   process.exit(failures === 0 ? 0 : 1);
 }

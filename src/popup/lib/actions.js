@@ -42,7 +42,7 @@ async function readTextCapped(res, maxBytes) {
 	return new TextDecoder().decode(merged);
 }
 
-export async function runAction(action, { origin, baseUrl, url, editUrl, viewUrl, logoutUrl, newTab = false }) {
+export async function runAction(action, { origin, baseUrl, url, editUrl, viewUrl, logoutUrl, visitUrl, newTab = false }) {
 	// Path-aware install base for synthesized links (carries any subdirectory
 	// prefix — issue #33). Callers that predate it pass only `origin`; fall
 	// back to that for root installs. `origin` is still used below for the
@@ -56,9 +56,19 @@ export async function runAction(action, { origin, baseUrl, url, editUrl, viewUrl
 		case 'view-post':
 			target = viewUrl || null;
 			break;
-		case 'visit-site':
-			target = `${base}/`;
+		case 'visit-site': {
+			// Prefer the admin bar's Visit Site href when the popup captured
+			// one (admin screens only): it carries home_url, which can
+			// legitimately differ from the synthesized base on installs with
+			// a split home/site configuration. DOM-sourced, so it must pass
+			// the same-origin http(s) guard; otherwise fall back to the base.
+			const rest = typeof window !== 'undefined' ? window.WPRest : null;
+			const safeVisit =
+				rest && typeof rest.isSameOriginPageUrl === 'function'
+					&& rest.isSameOriginPageUrl(visitUrl, origin) ? visitUrl : null;
+			target = safeVisit || `${base}/`;
 			break;
+		}
 		case 'admin':
 			target = `${base}/wp-admin/`;
 			break;

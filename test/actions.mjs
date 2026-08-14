@@ -233,5 +233,48 @@ console.log('\n[29] mobile-preview — delegates to the background instead of op
 	assert(closed === 1, 'popup closes after dispatching');
 }
 
+console.log('\n[43] synthesized targets from a subdirectory admin base (#88)');
+{
+	// Real WPRest so the visit-site same-origin guard is exercised, not stubbed.
+	const restSrc = readFileSync(join(__dirname, '..', 'lib', 'rest.js'), 'utf8');
+	const libCtx = {};
+	new Function('globalThis', 'document', 'window', restSrc)(libCtx, undefined, undefined);
+
+	const run = async (action, args) => {
+		const targets = [];
+		const chrome = {
+			tabs: {
+				update: async ({ url }) => { targets.push(url); },
+				create: async ({ url }) => { targets.push(url); },
+			},
+			runtime: { sendMessage: async () => {} },
+		};
+		const loader = new Function('chrome', 'window', 'navigator', `${actionsSrc}\nreturn { runAction };`);
+		const { runAction } = loader(chrome, { close: () => {}, WPRest: libCtx.WPRest }, { vendor: '' });
+		await runAction(action, args);
+		return targets[0] || null;
+	};
+
+	const base = {
+		origin: 'https://www.example.com',
+		baseUrl: 'https://www.example.com/en-us/research',
+		url: 'https://www.example.com/en-us/research/wp-admin/index.php',
+	};
+	assert(await run('visit-site', base) === 'https://www.example.com/en-us/research/',
+		'Visit Site target carries the full install base');
+	assert(await run('admin', base) === 'https://www.example.com/en-us/research/wp-admin/',
+		'WordPress Admin target carries the full install base');
+	assert(await run('profile', base) === 'https://www.example.com/en-us/research/wp-admin/profile.php',
+		'Profile target carries the full install base');
+	assert(await run('login', base) === 'https://www.example.com/en-us/research/wp-login.php',
+		'Log In target carries the full install base');
+	assert(await run('visit-site', { ...base, visitUrl: 'https://www.example.com/' }) === 'https://www.example.com/',
+		'validated Visit Site href (home_url) preferred over the synthesized base');
+	assert(await run('visit-site', { ...base, visitUrl: 'https://evil.example/' }) === 'https://www.example.com/en-us/research/',
+		'cross-origin Visit Site href rejected, base used');
+	assert(await run('visit-site', { ...base, visitUrl: 'javascript:alert(1)' }) === 'https://www.example.com/en-us/research/',
+		'non-http Visit Site href rejected, base used');
+}
+
 console.log(`\n${failures === 0 ? 'Popup action tests passed.' : failures + ' failure(s).'}`);
 process.exit(failures === 0 ? 0 : 1);

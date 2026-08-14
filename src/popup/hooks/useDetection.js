@@ -153,6 +153,9 @@ export function useDetection() {
 							const view    = ab.querySelector('#wp-admin-bar-view a[href]');
 							const preview = ab.querySelector('#wp-admin-bar-preview a[href]');
 							const logout  = ab.querySelector('#wp-admin-bar-logout a[href]');
+							// Admin screens only (the node does not exist on the front
+							// end); carries home_url — validated at point of use.
+							const visitSite = ab.querySelector('#wp-admin-bar-view-site a[href]');
 							const userInfoImg = ab.querySelector('#wp-admin-bar-user-info img.avatar');
 							const fallbackImg = ab.querySelector('#wp-admin-bar-my-account img.avatar');
 							const avatarImg = userInfoImg || fallbackImg;
@@ -195,6 +198,7 @@ export function useDetection() {
 								adminBarEditHref: edit?.href || null,
 								adminBarViewHref: view?.href || preview?.href || null,
 								adminBarLogoutHref: logout?.href || null,
+								adminBarVisitSiteHref: visitSite?.href || null,
 								userAvatarUrl,
 								userDisplayName,
 								userEditProfileHref: editProfile?.href || null,
@@ -222,6 +226,7 @@ export function useDetection() {
 							if (live.adminBarEditHref) lc.adminBarEditHref = live.adminBarEditHref;
 							if (live.adminBarViewHref) lc.adminBarViewHref = live.adminBarViewHref;
 							if (live.adminBarLogoutHref) lc.adminBarLogoutHref = live.adminBarLogoutHref;
+							if (live.adminBarVisitSiteHref) lc.adminBarVisitSiteHref = live.adminBarVisitSiteHref;
 							if (live.userAvatarUrl) lc.userAvatarUrl = live.userAvatarUrl;
 							if (live.userDisplayName) lc.userDisplayName = live.userDisplayName;
 							if (live.userEditProfileHref) lc.userEditProfileHref = live.userEditProfileHref;
@@ -322,6 +327,7 @@ export function useDetection() {
 							if (fc.adminBarEditHref) lc.adminBarEditHref = fc.adminBarEditHref;
 							if (fc.adminBarViewHref) lc.adminBarViewHref = fc.adminBarViewHref;
 							if (fc.adminBarLogoutHref) lc.adminBarLogoutHref = fc.adminBarLogoutHref;
+							if (fc.adminBarVisitSiteHref) lc.adminBarVisitSiteHref = fc.adminBarVisitSiteHref;
 							if (fc.userAvatarUrl) lc.userAvatarUrl = fc.userAvatarUrl;
 							if (fc.userDisplayName) lc.userDisplayName = fc.userDisplayName;
 							if (fc.userEditProfileHref) lc.userEditProfileHref = fc.userEditProfileHref;

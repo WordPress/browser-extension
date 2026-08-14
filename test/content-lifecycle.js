@@ -265,6 +265,61 @@ async function main() {
     assert(unset.enabled === 0, 'nothing set leaves the inspector off');
   }
 
+  // --- 44. pathname threads to detectWordPress at all three callsites ------
+  {
+    console.log('\n[44] location.pathname reaches detectWordPress at every callsite (#88)');
+    const ADMIN_PAGE = '<html><head></head><body class="wp-admin wp-core-ui">'
+      + '<div id="wpadminbar"></div></body></html>';
+    const ADMIN_PATH = '/en-us/research/wp-admin/index.php';
+    const page = makePage(ADMIN_PAGE, { url: `https://example.com${ADMIN_PATH}` });
+
+    // Record the options every call hands the real detector, then delegate.
+    const seen = [];
+    const orig = page.ctx.WPDetect.detectWordPress;
+    page.ctx.WPDetect.detectWordPress = (doc, opts) => { seen.push(opts || {}); return orig(doc, opts); };
+
+    // Callsite 1: initial detection at content-script load.
+    page.runContent();
+    await settle();
+    assert(seen.length >= 1 && seen[0].pathname === ADMIN_PATH,
+      'initial detection receives location.pathname');
+
+    // Callsite 2: GET_LIVE_DETECTION re-detection.
+    let liveResp = null;
+    for (const fn of page.listeners) fn({ type: 'GET_LIVE_DETECTION' }, {}, (r) => { liveResp = r; });
+    await settle();
+    assert(seen.length >= 2 && seen[1].pathname === ADMIN_PATH,
+      'GET_LIVE_DETECTION re-detection receives location.pathname');
+    assert(!!liveResp && liveResp.detection.context.baseUrl === 'https://example.com/en-us/research',
+      'live re-detection derives the subdirectory base end-to-end');
+
+    // Callsite 3: GET_FRESH_DETECTION parses fetched HTML via DOMParser, so
+    // the parsed doc has no defaultView and the callsite must thread the
+    // pathname explicitly. content.js resolves fetch/DOMParser as free
+    // globals in the Node realm here: stub fetch and lend jsdom's DOMParser
+    // for the duration, restoring both after.
+    const savedFetch = globalThis.fetch;
+    const savedParser = globalThis.DOMParser;
+    globalThis.fetch = async () => ({ ok: true, text: async () => ADMIN_PAGE });
+    globalThis.DOMParser = page.ctx.DOMParser;
+    try {
+      const fresh = await new Promise((resolve) => {
+        for (const fn of page.listeners) fn({ type: 'GET_FRESH_DETECTION' }, {}, resolve);
+      });
+      const last = seen[seen.length - 1];
+      assert(seen.length >= 3 && last.pathname === ADMIN_PATH,
+        'GET_FRESH_DETECTION passes location.pathname alongside origin');
+      assert(last.origin === 'https://example.com',
+        'GET_FRESH_DETECTION passes the live origin');
+      assert(!!fresh && !!fresh.detection
+        && fresh.detection.context.baseUrl === 'https://example.com/en-us/research',
+        'DOMParser-path detection derives the subdirectory base end-to-end');
+    } finally {
+      globalThis.fetch = savedFetch;
+      globalThis.DOMParser = savedParser;
+    }
+  }
+
   console.log(`\n${failures === 0 ? 'Content lifecycle tests passed.' : failures + ' failure(s).'}`);
   process.exit(failures === 0 ? 0 : 1);
 }
