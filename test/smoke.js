@@ -1125,6 +1125,27 @@ async function main() {
     assert(refs.includes('lib/my-sites.js'), 'lib/my-sites.js tracked (background importScripts)');
     assert(refs.includes('lib/rest.js') && refs.includes('dist/popup.js'),
       'popup classic scripts + bundle tracked (popup.html)');
+
+    // color-scheme declaration guard (#86). This asserts the declaration
+    // ships in both the markup and the compiled stylesheet, and that the
+    // Safari mirror carries identical copies. It is a packaging guard, not
+    // an automated Safari appearance test — the popover behavior itself is
+    // only observable in a live Safari popover and stays manually verified.
+    const popupHtml = fs.readFileSync(path.join(root, 'popup/popup.html'), 'utf8');
+    const metaAt = popupHtml.indexOf('<meta name="color-scheme" content="light dark">');
+    const styleAt = popupHtml.indexOf('<link rel="stylesheet"');
+    assert(metaAt !== -1, 'popup.html declares <meta name="color-scheme">');
+    assert(styleAt !== -1 && metaAt < styleAt,
+      'color-scheme meta precedes the stylesheet link');
+    const popupCss = fs.readFileSync(path.join(root, 'dist/popup.css'), 'utf8');
+    assert(/color-scheme:\s*light dark/.test(popupCss),
+      'compiled dist/popup.css carries the color-scheme declaration');
+    const SAFARI_RES = 'safari/WordPress Browser Extension/WordPress Browser Extension Extension/Resources';
+    for (const f of ['popup/popup.html', 'dist/popup.css']) {
+      const rootCopy = fs.readFileSync(path.join(root, f), 'utf8');
+      const mirrorCopy = fs.readFileSync(path.join(root, SAFARI_RES, f), 'utf8');
+      assert(rootCopy === mirrorCopy, `${f} byte-identical in the Safari mirror`);
+    }
   }
 
   // --- 30. Block inspector: block-comment parsing + ReDoS resistance -----
