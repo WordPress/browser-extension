@@ -226,9 +226,15 @@
           if (!res.ok) return sendResponse({ detection: null });
           const html = await res.text();
           const doc = new DOMParser().parseFromString(html, 'text/html');
-          // Parsed via DOMParser → no defaultView. Pass the live origin
-          // explicitly so the +New same-origin filter can validate hrefs.
-          const det = globalThis.WPDetect.detectWordPress(doc, { origin: location.origin });
+          // Parsed via DOMParser → no defaultView. Pass the live origin and
+          // pathname explicitly: the origin so the +New same-origin filter
+          // can validate hrefs, the pathname so the wp-admin base fallback
+          // works (the fetch is of location.href, so both describe the
+          // parsed document).
+          const det = globalThis.WPDetect.detectWordPress(doc, {
+            origin: location.origin,
+            pathname: location.pathname,
+          });
           if (!det.context.isLoggedIn) {
             det.context.isLoggedIn =
               globalThis.WPDetect.detectLoggedInFromCookies(document.cookie);

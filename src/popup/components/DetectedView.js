@@ -153,8 +153,8 @@ function WpAdminActions({ ctx, origin, baseUrl, url, user }) {
 			<ActionRow
 				icon={globe}
 				label={chrome.i18n.getMessage('visit_site') /* "Visit Site" */}
-				onClick={() => runAction('visit-site', { origin, baseUrl, url })}
-				onNewTab={() => runAction('visit-site', { origin, baseUrl, url, newTab: true })}
+				onClick={() => runAction('visit-site', { origin, baseUrl, url, visitUrl: ctx.adminBarVisitSiteHref })}
+				onNewTab={() => runAction('visit-site', { origin, baseUrl, url, visitUrl: ctx.adminBarVisitSiteHref, newTab: true })}
 			/>
 			<ActionRow
 				icon={dashboard}
