@@ -20,15 +20,20 @@
     "package:chrome": "bash scripts/package-chrome.sh"
   },
   "dependencies": {
-    "@wordpress/icons": "^12.2.0",
-    "@wordpress/ui": "^0.11.0",
-    "react": "^18.3.1",
-    "react-dom": "^18.3.1"
+    "@wordpress/icons": "^15.4.0",
+    "@wordpress/ui": "^0.20.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
   },
   "devDependencies": {
-    "@wordpress/scripts": "^32.6.0",
-    "cross-env": "^7.0.3",
-    "sharp": "^0.34.5"
+    "@wordpress/scripts": "^34.1.0",
+    "cross-env": "^10.1.0",
+    "sharp": "^0.35.3"
+  },
+  "overrides": {
+    "adm-zip": "0.6.0",
+    "serialize-javascript": "7.1.0",
+    "uuid": "^11.1.1"
   },
   "browserslist": [
     "last 2 Chrome versions",
