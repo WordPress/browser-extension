@@ -9,6 +9,15 @@
  */
 
 :root {
+	/* Declaring the supported schemes is required for Safari's extension
+	 * popover to adopt the system appearance: without it Safari renders the
+	 * popover's web view light regardless of macOS dark mode, and the dark
+	 * palette below is unreachable there (#86). Chromium also honors this
+	 * declaration for UA-rendered surfaces (default canvas, form controls,
+	 * scrollbars); this popup explicitly styles those visible surfaces
+	 * (backgrounds on html/body, custom controls, its own scrollbar). The
+	 * options page has carried the same declaration all along. */
+	color-scheme: light dark;
 	--wpd-width: 380px;
 	--wpd-pad-x: 16px;
 	--wpd-pad-y: 16px;
