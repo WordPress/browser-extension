@@ -1065,7 +1065,7 @@ body::-webkit-scrollbar-thumb:hover,
 	 * the taller surface. Chrome sizes the popup to content and gets none of
 	 * this — the extra height would just be dead space. */
 	html.is-safari & {
-		min-height: 320px;
+		min-height: 256px;
 		display: flex;
 		flex-direction: column;
 		align-items: center;
