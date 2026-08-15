@@ -15,10 +15,14 @@ import enMessages from '../../_locales/en/messages.json';
 // popup reads), so the My Sites section renders in the dev preview too.
 import '../../lib/my-sites.js';
 
-// Canned "My Sites" list for the preview, keyed exactly like the real store.
+// Canned "My Sites" list for the preview, keyed exactly like the real store
+// (install base, not bare origin — see #94). The two agency entries share an
+// origin so the path-qualified default labels are visible in the preview.
 const PREVIEW_MY_SITES = {
-	'https://acme.com': { origin: 'https://acme.com', baseUrl: 'https://acme.com', addedAt: 1, lastLoggedInAt: 3 },
-	'https://shop.example.com': { origin: 'https://shop.example.com', baseUrl: 'https://shop.example.com', addedAt: 1, lastLoggedInAt: 2, customName: 'Client Store — Staging' },
+	'https://acme.com': { origin: 'https://acme.com', baseUrl: 'https://acme.com', addedAt: 1, lastLoggedInAt: 4 },
+	'https://shop.example.com': { origin: 'https://shop.example.com', baseUrl: 'https://shop.example.com', addedAt: 1, lastLoggedInAt: 3, customName: 'Client Store — Staging' },
+	'https://agency.example/clienta': { origin: 'https://agency.example', baseUrl: 'https://agency.example/clienta', addedAt: 1, lastLoggedInAt: 2 },
+	'https://agency.example/clientb': { origin: 'https://agency.example', baseUrl: 'https://agency.example/clientb', addedAt: 1, lastLoggedInAt: 1 },
 };
 
 // Faithful-enough chrome.i18n.getMessage shim for the dev preview (the real

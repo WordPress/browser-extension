@@ -15,7 +15,7 @@ import { usePanelReveal } from '../hooks/usePanelReveal';
  * either → new tab (#29). An Edit toggle reveals per-row rename + remove.
  */
 export function MySites() {
-	const { sites, remove, rename, ready, displayName } = useMySites();
+	const { sites, remove, rename, ready, displayName, defaultLabel } = useMySites();
 	const [open, setOpen] = useState(false);
 	const triggerRef = usePanelReveal(open);
 	const [editing, setEditing] = useState(false);
@@ -41,9 +41,10 @@ export function MySites() {
 					<div className="wpd-mysites__list">
 						{sites.map((site) => (
 							<MySiteRow
-								key={site.origin}
+								key={site.key}
 								site={site}
 								label={displayName ? displayName(site) : site.origin}
+								defaultLabel={defaultLabel}
 								editing={editing}
 								onRemove={remove}
 								onRename={rename}
@@ -67,8 +68,8 @@ export function MySites() {
 	);
 }
 
-function MySiteRow({ site, label, editing, onRemove, onRename }) {
-	const { origin } = site;
+function MySiteRow({ site, label, defaultLabel, editing, onRemove, onRename }) {
+	const { origin, key } = site;
 	const baseUrl = site.baseUrl || origin;
 	const iconUrl = site.iconUrl || null;
 	const [iconFailed, setIconFailed] = useState(false);
@@ -78,6 +79,9 @@ function MySiteRow({ site, label, editing, onRemove, onRename }) {
 	} catch (_) {
 		/* keep origin */
 	}
+	// Host plus install path ('localhost/siteA') — the hover title and rename
+	// placeholder must tell two installs on one host apart (#94).
+	const siteHint = defaultLabel ? defaultLabel(site) : host;
 
 	const visit = (event) =>
 		runAction('visit-site', { origin, baseUrl, url: '', newTab: isNewTabIntent(event) });
@@ -113,9 +117,9 @@ function MySiteRow({ site, label, editing, onRemove, onRename }) {
 						className="wpd-mysites__rename"
 						type="text"
 						defaultValue={site.customName || ''}
-						placeholder={host}
+						placeholder={siteHint}
 						aria-label={chrome.i18n.getMessage('my_sites_rename_placeholder') /* "Custom name" */}
-						onBlur={(e) => onRename(origin, e.target.value)}
+						onBlur={(e) => onRename(key, e.target.value)}
 						onKeyDown={(e) => {
 							if (e.key === 'Enter') e.target.blur();
 						}}
@@ -125,7 +129,7 @@ function MySiteRow({ site, label, editing, onRemove, onRename }) {
 					<button
 						type="button"
 						className="wpd-card__aux-btn wpd-mysites__remove"
-						onClick={() => onRemove(origin)}
+						onClick={() => onRemove(key)}
 						aria-label={chrome.i18n.getMessage('my_sites_remove') /* "Remove site" */}
 						title={chrome.i18n.getMessage('my_sites_remove') /* "Remove site" */}
 					>
@@ -143,7 +147,7 @@ function MySiteRow({ site, label, editing, onRemove, onRename }) {
 				className="wpd-card__main"
 				onClick={visit}
 				onAuxClick={visit}
-				title={host}
+				title={siteHint}
 			>
 				{favicon}
 				<span className="wpd-card__label">{label}</span>

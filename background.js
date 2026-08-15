@@ -102,19 +102,59 @@ function enqueueStorageWrite(mutate) {
 
 // --- My Sites: persistent list of WP installs the user logs into ----------
 
+// Trustworthy install-base evidence only (#94): deriveBaseUrl falls back to
+// the bare origin for pages carrying no derivation evidence (no REST
+// discovery link, not an admin screen), and a speculative bare-origin My
+// Sites row must never be minted from such a page. A subdirectory PATH only
+// ever comes from real evidence (REST link or admin pathname); any
+// root-equivalent value (the bare origin, or slash/query/fragment variants
+// of it — decided on the CANONICALIZED candidate, not string equality)
+// counts only when this page's own REST discovery link confirms a root
+// install. Both URLs must be http(s): schemes like blob: can parse to a
+// same-origin `origin` while being nothing of the sort. Everything returned
+// here is re-sanitized at the storage boundary.
+function evidenceBackedBase(origin, baseUrl, restApiRoot) {
+  if (!baseUrl || typeof baseUrl !== 'string') return null;
+  let canonical;
+  try {
+    const u = new URL(baseUrl);
+    if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
+    if (u.origin !== origin) return null;
+    canonical = u.origin + u.pathname.replace(/\/+$/, '');
+  } catch (_) {
+    return null;
+  }
+  if (canonical !== origin) return baseUrl; // real subdirectory path
+  if (!restApiRoot || typeof restApiRoot !== 'string') return null;
+  try {
+    const r = new URL(restApiRoot, origin);
+    if (r.protocol !== 'http:' && r.protocol !== 'https:') return null;
+    return r.origin === origin ? origin : null;
+  } catch (_) {
+    return null;
+  }
+}
+
 // Record a logged-in WordPress site, applying the curation rule in
-// lib/my-sites.js. `wasLoggedIn` is the prior cached login state for this
-// origin, so a site the user removed isn't silently re-added while they keep
-// browsing it logged in — only a fresh logged-out→logged-in transition does.
-async function recordLogin(origin, baseUrl, iconUrl, wasLoggedIn) {
+// lib/my-sites.js. Removal is sticky — passive detection never re-adds a
+// record the user dismissed (restoring is an explicit future feature) — so
+// no login-transition state is tracked or needed. `pathname` comes from the
+// browser-attested sender URL and lets a login with no base evidence be
+// attributed to the existing install owning the path.
+async function recordLogin(origin, baseUrl, iconUrl, pathname) {
   if (!origin) return;
   await enqueueStorageWrite(async () => {
     const data = await chrome.storage.local.get(WPMySites.STORE_KEY);
-    const store = data[WPMySites.STORE_KEY] || {};
+    const orig = data[WPMySites.STORE_KEY] || {};
+    // Re-key a pre-#94 origin-keyed store before the upsert so keying and
+    // attribution see canonical install-base keys. Idempotent — a
+    // same-reference no-op on every store this build has written.
+    const store = WPMySites.migrateStore(orig);
     const next = WPMySites.upsertOnLogin(store, {
-      origin, baseUrl: baseUrl || null, iconUrl: iconUrl || null, wasLoggedIn, now: Date.now(),
+      origin, baseUrl: baseUrl || null, iconUrl: iconUrl || null,
+      now: Date.now(), pathname: pathname || null,
     });
-    if (next !== store) {
+    if (next !== orig) {
       await chrome.storage.local.set({ [WPMySites.STORE_KEY]: next });
     }
   });
@@ -122,15 +162,19 @@ async function recordLogin(origin, baseUrl, iconUrl, wasLoggedIn) {
 
 // Popup curation actions (rename / remove), serialized against recordLogin
 // and each other so a login racing a curation edit can't drop either write.
-async function mutateMySites({ op, origin, name }) {
-  if (typeof origin !== 'string' || !origin) throw new Error('bad origin');
+async function mutateMySites({ op, key, name }) {
+  if (typeof key !== 'string' || !key) throw new Error('bad key');
   return enqueueStorageWrite(async () => {
     const data = await chrome.storage.local.get(WPMySites.STORE_KEY);
-    const store = data[WPMySites.STORE_KEY] || {};
-    let next = store;
-    if (op === 'remove') next = WPMySites.removeSite(store, origin);
-    else if (op === 'rename') next = WPMySites.renameSite(store, origin, name);
-    if (next !== store) {
+    const orig = data[WPMySites.STORE_KEY] || {};
+    // Migrate first, then apply: the popup canonicalizes its snapshot with
+    // the same pure migrateStore before rendering, so the key it sends is
+    // canonical and addresses the record regardless of whether a queued
+    // login re-keyed the persisted store in the meantime.
+    let next = WPMySites.migrateStore(orig);
+    if (op === 'remove') next = WPMySites.removeSite(next, key);
+    else if (op === 'rename') next = WPMySites.renameSite(next, key, name);
+    if (next !== orig) {
       await chrome.storage.local.set({ [WPMySites.STORE_KEY]: next });
     }
     return next;
@@ -163,6 +207,18 @@ chrome.runtime.onInstalled.addListener(onLoad);
 
 async function onLoad() {
   await wipeLegacyCache();
+  // Canonicalize a pre-#94 origin-keyed My Sites store proactively so the
+  // popup renders canonical keys from its first open after an update; the
+  // per-write migrateStore in recordLogin/mutateMySites stays as the
+  // defensive backstop.
+  await enqueueStorageWrite(async () => {
+    const data = await chrome.storage.local.get(WPMySites.STORE_KEY);
+    const orig = data[WPMySites.STORE_KEY] || {};
+    const next = WPMySites.migrateStore(orig);
+    if (next !== orig) {
+      await chrome.storage.local.set({ [WPMySites.STORE_KEY]: next });
+    }
+  });
   await purgeStale();
   await repaintAllTabs();
 }
@@ -419,10 +475,9 @@ async function enforcePreviewSize(winId, width, height) {
 }
 
 async function handlePopupResolution(msg) {
-  const { origin, tabId, isLoggedIn, isWordPress, baseUrl, siteIconUrl } = msg;
+  const { origin, tabId, isLoggedIn, isWordPress, baseUrl, restApiRoot, siteIconUrl, pathname } = msg;
   if (!origin) return;
   const existing = await getEntry(origin);
-  const wasLoggedIn = existing?.isLoggedIn === true; // capture before mutating
   if (existing) {
     existing.isLoggedIn = !!isLoggedIn;
     existing.lastSeen = Date.now();
@@ -432,7 +487,12 @@ async function handlePopupResolution(msg) {
 
   // Catches cookie-API logins the page DOM missed (logged-out HTML).
   if (isWordPress && isLoggedIn) {
-    await recordLogin(origin, baseUrl, siteIconUrl, wasLoggedIn);
+    await recordLogin(
+      origin,
+      evidenceBackedBase(origin, baseUrl, restApiRoot),
+      siteIconUrl,
+      typeof pathname === 'string' ? pathname : null,
+    );
   }
 }
 
@@ -500,14 +560,21 @@ async function handleDetection(msg, sender) {
   await putEntry(origin, entry);
   await updateToolbar(sender.tab.id, entry.isWordPress, detection.context);
 
-  // Add to "My Sites" on a logged-in WordPress install. `existing?.isLoggedIn`
-  // is the prior state, so a removed site isn't re-added while still browsing.
+  // Add to "My Sites" on a logged-in WordPress install, keyed by the
+  // evidence-backed base. With no evidence, upsertOnLogin attributes the
+  // login to the existing record owning the pathname (browser-attested
+  // sender URL, not the message) or drops it — never a speculative
+  // bare-origin row. Removal is sticky, so no prior-state capture is needed.
   if (entry.isWordPress && entry.isLoggedIn) {
+    let pathname = null;
+    try {
+      pathname = new URL(sender.url).pathname;
+    } catch (_) { /* keep null */ }
     await recordLogin(
       origin,
-      detection.context?.baseUrl,
+      evidenceBackedBase(origin, detection.context?.baseUrl, detection.context?.restApiRoot),
       detection.context?.siteIconUrl,
-      existing?.isLoggedIn === true,
+      pathname,
     );
   }
 }

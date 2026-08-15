@@ -268,6 +268,12 @@ export function useDetection() {
 					isWordPress: true,
 					isLoggedIn: !!result.detection.context.isLoggedIn,
 					baseUrl: result.detection.context.baseUrl || null,
+					// The REST root lets the background tell a REST-confirmed
+					// root install from deriveBaseUrl's bare-origin fallback;
+					// the pathname lets a base-less login be attributed to the
+					// subdirectory install that owns the path (#94).
+					restApiRoot: result.detection.context.restApiRoot || null,
+					pathname: url.pathname,
 					siteIconUrl: result.detection.context.siteIconUrl || null,
 				}).catch(() => {});
 
@@ -309,6 +315,8 @@ export function useDetection() {
 								isWordPress: true,
 								isLoggedIn: false,
 								baseUrl: lc.baseUrl || null,
+								restApiRoot: lc.restApiRoot || null,
+								pathname: url.pathname,
 								siteIconUrl: lc.siteIconUrl || null,
 							}).catch(() => {});
 							setState({
