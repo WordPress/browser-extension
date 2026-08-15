@@ -62,6 +62,10 @@ function useSafariPopupLock(scrollRef, contentRef, ready) {
 		// Chrome's already-correct content-fit behavior.
 		if (navigator.vendor !== 'Apple Computer, Inc.') return undefined;
 
+		// Styling hook for Safari-only rules (the empty states reserve extra
+		// baseline height there — see .wpd-empty).
+		document.documentElement.classList.add('is-safari');
+
 		const scroller = scrollRef.current;
 		const content = contentRef.current;
 		const html = document.documentElement;

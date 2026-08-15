@@ -1058,6 +1058,19 @@ body::-webkit-scrollbar-thumb:hover,
 	 * sits inset in the 380px popup and --wpd-bg shows through as a band in dark
 	 * mode, where every other view is full-bleed. */
 	max-width: none;
+
+	/* Safari locks the popup to its baseline height (see useSafariPopupLock),
+	 * so a short empty state leaves My Sites expanding into a cramped scroll
+	 * box. Reserve extra baseline room there, with the message centered in
+	 * the taller surface. Chrome sizes the popup to content and gets none of
+	 * this — the extra height would just be dead space. */
+	html.is-safari & {
+		min-height: 320px;
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		justify-content: center;
+	}
 }
 
 /* Loading & empty states ----------------------------------------------- */
