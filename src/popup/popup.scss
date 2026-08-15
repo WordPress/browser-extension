@@ -1108,6 +1108,15 @@ body::-webkit-scrollbar-thumb:hover,
 		border: 0;
 		border-radius: 0;
 		border-top: 1px solid var(--wpd-border);
+
+		// In this flush stack a row's only border is the separator ABOVE it,
+		// so the standalone hover rule (stronger border-color) would recolor
+		// the line shared with the previous row — reading as the wrong row
+		// lighting up. Keep the separator steady; the background hover
+		// carries the affordance here.
+		&:hover:not(:has(.wpd-card__main[disabled])) {
+			border-color: var(--wpd-border);
+		}
 	}
 	.wpd-card-row:first-child {
 		border-top: 0;
