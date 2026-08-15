@@ -162,14 +162,14 @@ async function main() {
     console.log('\n[34] concurrent renames of two sites both persist');
     const seedLib = {};
     new Function('globalThis', mySitesSrc)(seedLib);
-    let seed = seedLib.WPMySites.upsertOnLogin({}, { origin: 'https://a.example', now: 1000 });
-    seed = seedLib.WPMySites.upsertOnLogin(seed, { origin: 'https://b.example', now: 2000 });
+    let seed = seedLib.WPMySites.upsertOnLogin({}, { origin: 'https://a.example', baseUrl: 'https://a.example', now: 1000 });
+    seed = seedLib.WPMySites.upsertOnLogin(seed, { origin: 'https://b.example', baseUrl: 'https://b.example', now: 2000 });
     const storage = makeStorage({ [MY_SITES_KEY]: seed });
     const { send } = loadBackground(storage);
 
     const [resA, resB] = await Promise.all([
-      send({ type: 'MUTATE_MY_SITES', op: 'rename', origin: 'https://a.example', name: 'Site A' }, POPUP_SENDER),
-      send({ type: 'MUTATE_MY_SITES', op: 'rename', origin: 'https://b.example', name: 'Site B' }, POPUP_SENDER),
+      send({ type: 'MUTATE_MY_SITES', op: 'rename', key: 'https://a.example', name: 'Site A' }, POPUP_SENDER),
+      send({ type: 'MUTATE_MY_SITES', op: 'rename', key: 'https://b.example', name: 'Site B' }, POPUP_SENDER),
     ]);
     await settle();
     const store = storage.read(MY_SITES_KEY);
@@ -200,7 +200,7 @@ async function main() {
     console.log('\n[36] background login racing a popup removal preserves both');
     const seedLib = {};
     new Function('globalThis', mySitesSrc)(seedLib);
-    const seed = seedLib.WPMySites.upsertOnLogin({}, { origin: 'https://old.example', now: 1000 });
+    const seed = seedLib.WPMySites.upsertOnLogin({}, { origin: 'https://old.example', baseUrl: 'https://old.example', now: 1000 });
     const storage = makeStorage({ [MY_SITES_KEY]: seed });
     const { send } = loadBackground(storage);
 
@@ -211,8 +211,10 @@ async function main() {
         isWordPress: true,
         isLoggedIn: true,
         baseUrl: 'https://new.example',
+        // A bare-origin base needs the page's REST root as evidence (#94).
+        restApiRoot: 'https://new.example/wp-json/',
       }, POPUP_SENDER),
-      send({ type: 'MUTATE_MY_SITES', op: 'remove', origin: 'https://old.example' }, POPUP_SENDER),
+      send({ type: 'MUTATE_MY_SITES', op: 'remove', key: 'https://old.example' }, POPUP_SENDER),
     ]);
     await settle();
     const store = storage.read(MY_SITES_KEY);
@@ -228,7 +230,7 @@ async function main() {
     const { send } = loadBackground(storage);
 
     const res = await send(
-      { type: 'MUTATE_MY_SITES', op: 'rename', origin: 'https://a.example', name: 'x' },
+      { type: 'MUTATE_MY_SITES', op: 'rename', key: 'https://a.example', name: 'x' },
       CONTENT_SENDER,
     );
     await settle();
@@ -330,6 +332,124 @@ async function main() {
     await send({ type: 'OPEN_MOBILE_PREVIEW', url: 'https://evil.example/x', enforceSize: false }, CONTENT_SENDER);
     assert(winState.created.length === before.created && winState.navigated.length === before.navigated,
       'content-script sender is ignored');
+  }
+
+  // --- 41. #94: migration, canonical curation, evidence gate, sticky removal ---
+  {
+    console.log('\n[41] pre-#94 stores re-key on write; canonical-key curation; no speculative rows; removal sticky');
+    const HOST = 'http://localhost';
+    const SA = `${HOST}/siteA`, SB = `${HOST}/siteB`;
+    // A store as a pre-#94 build persisted it: a subdirectory install keyed
+    // by its bare origin, the install base only in the record body.
+    const legacy = {
+      [HOST]: { origin: HOST, baseUrl: SB, addedAt: 1, lastLoggedInAt: 1, customName: 'Site B' },
+    };
+    {
+      // A login write migrates the legacy record and records the sibling in
+      // one pass; no origin-keyed remnant survives.
+      const storage = makeStorage({ [MY_SITES_KEY]: structuredClone(legacy) });
+      const { send } = loadBackground(storage);
+      await send({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: SA, pathname: '/siteA/wp-admin/',
+      }, POPUP_SENDER);
+      await settle();
+      const store = storage.read(MY_SITES_KEY);
+      assert(!store[HOST] && store[SB]?.customName === 'Site B',
+        'legacy record re-keyed to its install base with curation intact');
+      assert(!!store[SA] && Object.keys(store).length === 2, 'sibling install recorded separately');
+    }
+    {
+      // The popup canonicalizes its snapshot with the same migrateStore, so
+      // it sends the canonical key even while the persisted store is still
+      // legacy-keyed; the background migrates before applying the op.
+      const storage = makeStorage({ [MY_SITES_KEY]: structuredClone(legacy) });
+      const { send, WPMySites } = loadBackground(storage);
+      const canonical = WPMySites.listSites(WPMySites.migrateStore(structuredClone(legacy)))[0].key;
+      assert(canonical === SB, 'popup-side canonicalization yields the canonical key');
+      const res = await send({ type: 'MUTATE_MY_SITES', op: 'remove', key: canonical }, POPUP_SENDER);
+      await settle();
+      const store = storage.read(MY_SITES_KEY);
+      assert(res?.ok === true && !store[HOST] && store[SB]?.dismissed === true,
+        'canonical-keyed remove lands on the migrated record');
+    }
+    {
+      // Evidence gate + sticky removal end-to-end on the real worker paths.
+      const storage = makeStorage({});
+      const { send } = loadBackground(storage);
+      const detect = (path, ctx) => send({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 100, signals: ['rest-api-link'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+
+      // deriveBaseUrl reports the bare origin as a FALLBACK for pages with
+      // no derivation evidence (wp-login.php, REST-stripped fronts). Such a
+      // page must not mint a speculative bare-origin row — and neither must
+      // root-EQUIVALENT variants (trailing slash, query/fragment-only) or
+      // non-http(s) values whose parsed origin still matches (blob:), with
+      // or without a forged non-http(s) REST root.
+      await detect('/siteA/wp-login.php', { isLoggedIn: true, baseUrl: HOST });
+      await detect('/x/', { isLoggedIn: true, baseUrl: `${HOST}/` });
+      await detect('/x/', { isLoggedIn: true, baseUrl: `${HOST}/?p=1` });
+      await detect('/x/', { isLoggedIn: true, baseUrl: `${HOST}/#frag` });
+      await detect('/x/', { isLoggedIn: true, baseUrl: `blob:${HOST}/some-uuid` });
+      await detect('/x/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `blob:${HOST}/wp-json/` });
+      await settle();
+      assert(Object.keys(storage.read(MY_SITES_KEY) || {}).length === 0,
+        'no base-evidence variant (fallback, root-equivalent, blob:) mints a bare-origin row');
+      // …while a REST-confirmed root install records normally.
+      await detect('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/wp-json/` });
+      await settle();
+      assert(!!storage.read(MY_SITES_KEY)[HOST], 'a REST-confirmed root install is recorded');
+
+      // Subdirectory evidence records the sibling; its removal is then
+      // sticky against every later passive path.
+      await detect('/siteA/wp-admin/', { isLoggedIn: true, baseUrl: SA });
+      await send({ type: 'MUTATE_MY_SITES', op: 'remove', key: SA }, POPUP_SENDER);
+      await settle();
+      assert(storage.read(MY_SITES_KEY)[SA]?.dismissed === true, 'sibling recorded and then tombstoned');
+      await detect('/siteA/wp-admin/', { isLoggedIn: true, baseUrl: SA });
+      await detect('/siteA/2026/hello/', { isLoggedIn: true, baseUrl: HOST });
+      await settle();
+      const after = storage.read(MY_SITES_KEY);
+      assert(after[SA]?.dismissed === true, 'no passive detection revives the removed install');
+      assert(Object.keys(after).length === 2, 'and no sibling or origin duplicate was minted');
+      assert(after[HOST]?.dismissed === undefined, 'the root record is untouched');
+    }
+    {
+      // v1.0.1 ambiguity, end to end: a subdirectory install seen only via
+      // wp-admin was stored as { key: origin, baseUrl: origin } —
+      // indistinguishable from a root install. Deterministic policy: the
+      // record stays PINNED at the origin; sibling evidence records
+      // separately and never moves or inherits its curation. This is the
+      // adversarial case: visiting sibling B must not move an ambiguous
+      // legacy record's name or tombstone from the origin to B.
+      for (const dismissed of [false, true]) {
+        const label = dismissed ? 'dismissed v1.0.1 record' : 'active v1.0.1 record';
+        const legacy101 = {
+          [HOST]: {
+            origin: HOST, baseUrl: HOST, addedAt: 1, lastLoggedInAt: 5,
+            customName: 'Mine', ...(dismissed ? { dismissed: true } : {}),
+          },
+        };
+        const storage = makeStorage({ [MY_SITES_KEY]: structuredClone(legacy101) });
+        const { send } = loadBackground(storage);
+        const detect = (path, ctx) => send({
+          type: 'WP_DETECTION',
+          detection: { isWordPress: true, confidence: 100, signals: ['rest-api-link'], context: ctx },
+          hostFromDOM: 'selfhosted',
+        }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+        await detect('/siteA/wp-admin/', { isLoggedIn: true, baseUrl: SA });
+        await settle();
+        const store = storage.read(MY_SITES_KEY);
+        assert(store[HOST]?.customName === 'Mine' && !!store[HOST]?.dismissed === dismissed,
+          `${label}: pinned at the origin with its curation intact`);
+        assert(!!store[SA] && store[SA].customName === undefined && store[SA].dismissed === undefined,
+          `${label}: the sibling records separately with fresh curation`);
+        assert(Object.keys(store).length === 2, `${label}: no record moved, none lost`);
+      }
+    }
   }
 
   console.log(`\n${failures === 0 ? 'Background storage tests passed.' : failures + ' failure(s).'}`);

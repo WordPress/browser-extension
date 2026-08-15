@@ -1055,29 +1055,27 @@ async function main() {
 
     // Fresh login adds; second login bumps recency, not a duplicate.
     let store = {};
-    store = WPMySites.upsertOnLogin(store, { origin: A, baseUrl: A, wasLoggedIn: false, now: 100 });
+    store = WPMySites.upsertOnLogin(store, { origin: A, baseUrl: A, now: 100 });
     assert(!!store[A], 'fresh login adds the site');
     assert(store[A].addedAt === 100 && store[A].lastLoggedInAt === 100, 'timestamps set on add');
-    store = WPMySites.upsertOnLogin(store, { origin: A, baseUrl: A, wasLoggedIn: true, now: 200 });
+    store = WPMySites.upsertOnLogin(store, { origin: A, baseUrl: A, now: 200 });
     assert(Object.keys(store).length === 1 && store[A].lastLoggedInAt === 200, 'revisit bumps recency, no dupe');
+    store = WPMySites.upsertOnLogin(store, { origin: C, baseUrl: C, now: 250 });
+    assert(listed(store).includes(C), 'a site the user was already logged into is added on first sight');
 
-    // Already-logged-in site (no transition) still gets added when absent.
-    store = WPMySites.upsertOnLogin(store, { origin: C, baseUrl: C, wasLoggedIn: true, now: 250 });
-    assert(listed(store).includes(C), 'already-logged-in absent site is added regardless of transition');
-
-    // Remove tombstones (hidden, not deleted) so still-logged-in browsing
-    // does NOT silently re-add it.
+    // Remove is STICKY: the record tombstones (hidden, not deleted) and no
+    // passive detection ever re-adds it — neither a keyed logged-in view nor
+    // an attributed base-less one. Restoring is an explicit future feature.
     store = WPMySites.removeSite(store, A);
     assert(store[A] && store[A].dismissed === true, 'remove tombstones the record');
     assert(!listed(store).includes(A), 'removed site is hidden from the list');
-    store = WPMySites.upsertOnLogin(store, { origin: A, baseUrl: A, wasLoggedIn: true, now: 300 });
-    assert(!listed(store).includes(A), 'still-logged-in browsing does not re-add a removed site');
-    // A genuine logged-out → logged-in transition un-dismisses it.
-    store = WPMySites.upsertOnLogin(store, { origin: A, baseUrl: A, wasLoggedIn: false, now: 400 });
-    assert(listed(store).includes(A), 'fresh login transition re-adds a removed site');
+    assert(WPMySites.upsertOnLogin(store, { origin: A, baseUrl: A, now: 300 }) === store,
+      'a later logged-in view of a removed site is a same-reference no-op');
+    assert(WPMySites.upsertOnLogin(store, { origin: A, baseUrl: null, pathname: '/post/', now: 310 }) === store,
+      'an attributed base-less login cannot re-add it either');
 
     // Sort: newest login first.
-    store = WPMySites.upsertOnLogin(store, { origin: B, baseUrl: B, wasLoggedIn: false, now: 500 });
+    store = WPMySites.upsertOnLogin(store, { origin: B, baseUrl: B, now: 500 });
     assert(listed(store)[0] === B, 'listSites sorts by lastLoggedInAt desc');
 
     // Rename + display label, set and clear.
@@ -1088,21 +1086,27 @@ async function main() {
     store = WPMySites.renameSite(store, A, '   ');
     assert(store[A].customName === undefined, 'blank rename clears the custom name');
 
-    // Storage-boundary sanitization: a forged detection must not persist a
-    // cross-origin baseUrl or a data:/oversized/non-http(s) iconUrl.
-    const poisoned = WPMySites.upsertOnLogin({}, {
-      origin: A, baseUrl: 'https://evil.example/wp',
-      iconUrl: 'data:image/svg+xml,' + 'x'.repeat(5000), wasLoggedIn: false, now: 1,
+    // Storage-boundary sanitization: a forged cross-origin baseUrl finds no
+    // attribution target on an empty store and mints NOTHING (pre-#94 it
+    // fell back to a bare-origin record); a poisoned iconUrl is dropped
+    // while the record itself persists.
+    const forged = WPMySites.upsertOnLogin({}, {
+      origin: A, baseUrl: 'https://evil.example/wp', now: 1,
     });
-    assert(poisoned[A].baseUrl === null, 'cross-origin baseUrl is not persisted');
+    assert(Object.keys(forged).length === 0, 'cross-origin baseUrl attributes to nothing and mints nothing');
+    const poisoned = WPMySites.upsertOnLogin({}, {
+      origin: A, baseUrl: A, iconUrl: 'data:image/svg+xml,' + 'x'.repeat(5000), now: 1,
+    });
     assert(poisoned[A].iconUrl === null, 'data:/oversized iconUrl is not persisted');
 
-    // A same-origin subdirectory base and a CDN (cross-origin http) icon are kept.
+    // A same-origin subdirectory base and a CDN (cross-origin http) icon are
+    // kept — and the record keys by its install base, not the origin (#94).
     const kept = WPMySites.upsertOnLogin({}, {
-      origin: A, baseUrl: A + '/blog', iconUrl: 'https://cdn.example/i.png', wasLoggedIn: false, now: 1,
+      origin: A, baseUrl: A + '/blog', iconUrl: 'https://cdn.example/i.png', now: 1,
     });
-    assert(kept[A].baseUrl === A + '/blog', 'same-origin subdirectory baseUrl is kept');
-    assert(kept[A].iconUrl === 'https://cdn.example/i.png', 'http(s) iconUrl (incl. CDN) is kept');
+    assert(kept[A + '/blog'] && kept[A + '/blog'].baseUrl === A + '/blog',
+      'same-origin subdirectory baseUrl is kept and keys the record');
+    assert(kept[A + '/blog'].iconUrl === 'https://cdn.example/i.png', 'http(s) iconUrl (incl. CDN) is kept');
 
     // listSites re-sanitizes records persisted before the write-time guard.
     const legacy = { [A]: { origin: A, baseUrl: 'https://evil.example', iconUrl: 'javascript:alert(1)', lastLoggedInAt: 5 } };
@@ -1270,6 +1274,197 @@ async function main() {
     });
     assert(rest.context.baseUrl === 'https://www.example.com/en-us/research',
       `REST-derived base wins over the pathname (${rest.context.baseUrl})`);
+  }
+
+  // --- 43. My Sites keys by install base (#94) --------------------------
+  {
+    console.log('\n[43] My Sites: sibling installs, migration, sticky removal, no speculative rows (#94)');
+    const dom = new JSDOM('<html><body></body></html>');
+    const { WPMySites } = loadModules(dom);
+    const HOST = 'http://localhost';
+    const SA = HOST + '/siteA', SB = HOST + '/siteB';
+
+    // The reported repro (issue #94): two subdirectory installs on one
+    // origin stay two records, and each curation op touches only its own.
+    let store = {};
+    store = WPMySites.upsertOnLogin(store, { origin: HOST, baseUrl: SA, now: 1 });
+    store = WPMySites.upsertOnLogin(store, { origin: HOST, baseUrl: SB, now: 2 });
+    assert(Object.keys(store).length === 2, 'two installs on one origin → two records');
+    const listed = WPMySites.listSites(store);
+    assert(listed.length === 2 && listed[0].baseUrl === SB && listed[1].baseUrl === SA,
+      'both installs listed, newest first, each with its own base');
+    assert(listed[0].key === SB && listed[1].key === SA, 'listSites exposes canonical store keys');
+    store = WPMySites.removeSite(store, SB);
+    assert(WPMySites.listSites(store).length === 1 && WPMySites.listSites(store)[0].baseUrl === SA,
+      'removing siteB leaves siteA listed');
+    store = WPMySites.renameSite(store, SA, 'Site A');
+    assert(store[SA].customName === 'Site A' && store[SB].customName === undefined,
+      'rename touches only its own record');
+    assert(WPMySites.displayName(store[SA]) === 'Site A', 'custom name wins');
+    assert(WPMySites.defaultLabel(store[SA]) === 'localhost/siteA',
+      'default label carries the install path');
+    assert(WPMySites.defaultLabel({ origin: 'https://www.acme.com', baseUrl: 'https://www.acme.com/' }) === 'acme.com',
+      'root install label stays the bare www-stripped host');
+
+    // siteKey: canonical (trailing slashes trimmed, query/fragment dropped);
+    // cross-origin, invalid, or missing bases fall back to the bare origin.
+    assert(WPMySites.siteKey({ origin: HOST, baseUrl: SA + '///' }) === SA, 'trailing slash run trimmed');
+    assert(WPMySites.siteKey({ origin: HOST, baseUrl: SA + '/?p=1#x' }) === SA, 'query/fragment dropped');
+    assert(WPMySites.siteKey({ origin: HOST, baseUrl: 'https://evil.example/wp' }) === HOST,
+      'cross-origin base falls back to the origin key');
+    assert(WPMySites.siteKey({ origin: HOST, baseUrl: null }) === HOST, 'no base → origin key');
+
+    // Root and subdirectory installs coexist; a base-less login attributes
+    // to the longest matching install path (segment-exact) and falls to the
+    // root record only when no subdirectory owns the path.
+    let mixed = {};
+    mixed = WPMySites.upsertOnLogin(mixed, { origin: HOST, baseUrl: HOST, now: 1 });
+    mixed = WPMySites.upsertOnLogin(mixed, { origin: HOST, baseUrl: SA, now: 2 });
+    assert(Object.keys(mixed).length === 2, 'root + subdirectory installs coexist');
+    mixed = WPMySites.upsertOnLogin(mixed, { origin: HOST, baseUrl: null, pathname: '/siteA/2026/08/hello/', now: 3 });
+    assert(Object.keys(mixed).length === 2 && mixed[SA].lastLoggedInAt === 3 && mixed[HOST].lastLoggedInAt === 1,
+      'base-less login bumps the owning install, not the root record');
+    mixed = WPMySites.upsertOnLogin(mixed, { origin: HOST, baseUrl: null, pathname: '/siteA', now: 4 });
+    assert(mixed[SA].lastLoggedInAt === 4, 'exact base pathname (no trailing slash) attributes too');
+    mixed = WPMySites.upsertOnLogin(mixed, { origin: HOST, baseUrl: null, pathname: '/siteAxe/post/', now: 5 });
+    assert(mixed[HOST].lastLoggedInAt === 5 && mixed[SA].lastLoggedInAt === 4,
+      '/siteAxe is not under /siteA (segment-exact) — the root record absorbs it');
+
+    // No speculative rows: with nothing to attribute to, a base-less login
+    // is dropped entirely rather than minting a bare-origin record.
+    const dropped = WPMySites.upsertOnLogin({}, { origin: HOST, baseUrl: null, pathname: '/siteA/x/', now: 1 });
+    assert(Object.keys(dropped).length === 0, 'unattributable login mints nothing');
+
+    // Sticky removal through every write shape: a keyed logged-in view and
+    // an attributed view of the removed install's own path are both
+    // same-reference no-ops (nothing revives, nothing else is minted).
+    const dism = WPMySites.removeSite(mixed, SA);
+    assert(WPMySites.upsertOnLogin(dism, { origin: HOST, baseUrl: SA, now: 6 }) === dism,
+      'a keyed logged-in view cannot revive a removed install');
+    assert(WPMySites.upsertOnLogin(dism, { origin: HOST, baseUrl: null, pathname: '/siteA/wp-admin/', now: 7 }) === dism,
+      'an attributed view of its path cannot revive it — and mints no sibling');
+
+    // Migration: a pre-#94 store re-keys each record by its own stored base,
+    // preserving curation state. Root-keyed records (the common case) are a
+    // same-reference no-op so callers skip the storage write; idempotent;
+    // collisions keep the most recently logged-into record; junk carries.
+    const legacyRoot = { [HOST]: { origin: HOST, baseUrl: HOST, addedAt: 1, lastLoggedInAt: 1 } };
+    assert(WPMySites.migrateStore(legacyRoot) === legacyRoot, 'origin-keyed root store is a no-op (same ref)');
+    const legacySub = {
+      [HOST]: { origin: HOST, baseUrl: SB, addedAt: 1, lastLoggedInAt: 9, customName: 'Site B', dismissed: true },
+      'https://acme.com': { origin: 'https://acme.com', baseUrl: 'https://acme.com', addedAt: 2, lastLoggedInAt: 3 },
+    };
+    const migrated = WPMySites.migrateStore(legacySub);
+    assert(migrated !== legacySub && !migrated[HOST] && !!migrated[SB],
+      'subdirectory record re-keys from origin to its install base');
+    assert(migrated[SB].customName === 'Site B' && migrated[SB].dismissed === true && migrated[SB].addedAt === 1,
+      'migration preserves customName / dismissed / addedAt');
+    assert(migrated['https://acme.com'] === legacySub['https://acme.com'],
+      'unaffected records carry through untouched');
+    assert(WPMySites.migrateStore(migrated) === migrated, 'migration is idempotent (same ref)');
+    const collide = {
+      a: { origin: HOST, baseUrl: SA, lastLoggedInAt: 1 },
+      b: { origin: HOST, baseUrl: SA, lastLoggedInAt: 7 },
+    };
+    const winner = WPMySites.migrateStore(collide);
+    assert(Object.keys(winner).length === 1 && winner[SA].lastLoggedInAt === 7,
+      'a key collision keeps the most recently logged-into record');
+    // A collision never drops a tombstone, in either win direction.
+    const collideDismissed = WPMySites.migrateStore({
+      [SA]: { origin: HOST, baseUrl: SA, lastLoggedInAt: 100, dismissed: true },
+      [HOST]: { origin: HOST, baseUrl: SA, lastLoggedInAt: 200 },
+    });
+    assert(Object.keys(collideDismissed).length === 1
+      && collideDismissed[SA].lastLoggedInAt === 200 && collideDismissed[SA].dismissed === true,
+      'the newer record wins the collision but inherits the tombstone');
+    const collideDismissedOld = WPMySites.migrateStore({
+      [SA]: { origin: HOST, baseUrl: SA, lastLoggedInAt: 300 },
+      [HOST]: { origin: HOST, baseUrl: SA, lastLoggedInAt: 5, dismissed: true },
+    });
+    assert(collideDismissedOld[SA].lastLoggedInAt === 300 && collideDismissedOld[SA].dismissed === true,
+      'an older dismissed loser still marks the surviving record');
+    // Uninterpretable records (no valid same-shape http(s) origin) are
+    // DROPPED during migration: invisible to the popup, unreachable by
+    // curation, and dropping keeps hostile keys out of the accumulator.
+    const j = WPMySites.migrateStore({
+      weird: { notASite: true },
+      nullish: null,
+      poisonedOrigin: { origin: '__proto__', lastLoggedInAt: 9 },
+      [HOST]: { origin: HOST, baseUrl: SA, lastLoggedInAt: 1 },
+    });
+    assert(!j.weird && !j.nullish && !!j[SA] && Object.keys(j).length === 1,
+      'uninterpretable records are dropped during migration');
+    const junkClobber = WPMySites.migrateStore({
+      'https://x.example/': { origin: 'https://x.example', baseUrl: null, lastLoggedInAt: 9, customName: 'real' },
+      'https://x.example': null,
+    });
+    assert(junkClobber['https://x.example']?.customName === 'real' && Object.keys(junkClobber).length === 1,
+      "a junk entry is dropped, never contesting a real record's canonical slot");
+    const protoStore = WPMySites.migrateStore(JSON.parse(
+      `{"__proto__":{"x":1},"${HOST}":{"origin":"${HOST}","baseUrl":"${SA}","lastLoggedInAt":1}}`,
+    ));
+    assert(!!protoStore[SA] && Object.getPrototypeOf(protoStore) === Object.prototype,
+      'a hostile __proto__ entry is dropped, never assigned into the accumulator');
+
+    // Curation lookups are own-property only: inherited names must be
+    // absent-key no-ops (same reference back), never prototype reads/writes.
+    const guarded = { [SA]: { origin: HOST, baseUrl: SA, lastLoggedInAt: 1 } };
+    assert(WPMySites.removeSite(guarded, '__proto__') === guarded, "removeSite('__proto__') is a no-op");
+    assert(WPMySites.renameSite(guarded, '__proto__', 'x') === guarded, "renameSite('__proto__') is a no-op");
+    assert(WPMySites.removeSite(guarded, 'constructor') === guarded, "removeSite('constructor') is a no-op");
+    assert(Object.getPrototypeOf(guarded) === Object.prototype && !Object.prototype.dismissed,
+      'the prototype chain is untouched');
+
+    // Non-http(s) schemes fail sanitization even when their parsed origin
+    // matches the page origin (blob: URLs do exactly that), and accepted
+    // bases come back CANONICAL: origin + normalized pathname only, with
+    // query, fragment, credentials, and trailing slash runs dropped.
+    assert(WPMySites.sanitizeBaseUrl(`blob:${HOST}/some-uuid`, HOST) === null,
+      'a same-origin blob: baseUrl is rejected');
+    assert(WPMySites.sanitizeBaseUrl(`${SA}/?p=1#x`, HOST) === SA,
+      'query and fragment are dropped at sanitization');
+    assert(WPMySites.sanitizeBaseUrl('http://user:pass@localhost/siteA', HOST) === SA,
+      'credentials are dropped at sanitization');
+    assert(WPMySites.sanitizeBaseUrl(`${SA}///`, HOST) === SA,
+      'trailing slash runs are trimmed at sanitization');
+    assert(WPMySites.sanitizeBaseUrl(`${HOST}/%73iteA`, HOST) === SA,
+      'percent-encoded unreserved characters normalize (RFC 3986): /%73iteA is /siteA');
+    const encDupe = WPMySites.upsertOnLogin(
+      WPMySites.upsertOnLogin({}, { origin: HOST, baseUrl: `${HOST}/%73iteA`, now: 1 }),
+      { origin: HOST, baseUrl: SA, now: 2 },
+    );
+    assert(Object.keys(encDupe).length === 1 && encDupe[SA].lastLoggedInAt === 2,
+      'URI-equivalent encodings share one record, never two keys');
+    const canonStored = WPMySites.upsertOnLogin({}, { origin: HOST, baseUrl: `${SA}/?utm=1#frag`, now: 1 });
+    assert(!!canonStored[SA] && canonStored[SA].baseUrl === SA,
+      'the STORED baseUrl is the canonical form');
+
+    // Ambiguous legacy records (root-looking base, pre-#94 shape) are
+    // PINNED to the origin key. Lossless migration of that data is
+    // impossible — a subdirectory install seen only via wp-admin was stored
+    // as { key: origin, baseUrl: origin } — so the policy is deterministic
+    // instead of guessing: sibling evidence records separately and NEVER
+    // moves, renames, or inherits the origin record's curation, active or
+    // dismissed. (The stale origin row and, for dismissed records, the
+    // sibling reappearing as new are the documented cost.)
+    const legacyActive = { [HOST]: { origin: HOST, baseUrl: HOST, addedAt: 1, lastLoggedInAt: 5, customName: 'My Site' } };
+    const pinnedActive = WPMySites.upsertOnLogin(legacyActive, { origin: HOST, baseUrl: SA, now: 9 });
+    assert(!!pinnedActive[HOST] && pinnedActive[HOST].customName === 'My Site'
+      && pinnedActive[HOST].lastLoggedInAt === 5,
+      'sibling evidence leaves the ambiguous origin record untouched');
+    assert(!!pinnedActive[SA] && pinnedActive[SA].customName === undefined && pinnedActive[SA].addedAt === 9,
+      'the sibling records separately with fresh curation');
+    const legacyDismissed = {
+      [HOST]: { origin: HOST, baseUrl: HOST, addedAt: 1, lastLoggedInAt: 5, dismissed: true, customName: 'My Site' },
+    };
+    const pinnedDismissed = WPMySites.upsertOnLogin(legacyDismissed, { origin: HOST, baseUrl: SA, now: 9 });
+    assert(pinnedDismissed[HOST].dismissed === true && pinnedDismissed[HOST].customName === 'My Site',
+      "the origin record's tombstone and name never migrate to a sibling");
+    assert(!!pinnedDismissed[SA] && pinnedDismissed[SA].dismissed === undefined,
+      'the sibling starts fresh (a legacy dismissal cannot be associated with it — documented)');
+    const rootBump = WPMySites.upsertOnLogin(legacyActive, { origin: HOST, baseUrl: HOST, now: 9 });
+    assert(rootBump[HOST].lastLoggedInAt === 9 && rootBump[HOST].customName === 'My Site' && !rootBump[SA],
+      'root evidence bumps the pinned origin record in place; its key never changes');
   }
 
   console.log(`\n${failures === 0 ? 'All tests passed.' : failures + ' failure(s).'}`);

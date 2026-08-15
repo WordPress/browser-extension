@@ -18,14 +18,25 @@ const STORE_KEY = 'wp_my_sites_v1';
 export function useMySites() {
 	const [store, setStore] = useState(null);
 
+	// Canonicalize the snapshot on read: migrateStore (pure, same-reference
+	// no-op on already-canonical stores) re-keys any pre-#94 origin-keyed
+	// records in memory, so every key this hook renders and sends is the
+	// canonical install-base key the background's own migrate-before-write
+	// produces. The popup never writes the migrated result itself — the
+	// background stays the single writer.
+	const canonicalize = (raw) => {
+		const lib = wpMySites();
+		return lib ? lib.migrateStore(raw) : raw;
+	};
+
 	useEffect(() => {
 		let cancelled = false;
 		chrome.storage?.local?.get(STORE_KEY).then((data) => {
-			if (!cancelled) setStore(data?.[STORE_KEY] || {});
+			if (!cancelled) setStore(canonicalize(data?.[STORE_KEY] || {}));
 		});
 		const onChanged = (changes, area) => {
 			if (area === 'local' && changes[STORE_KEY]) {
-				setStore(changes[STORE_KEY].newValue || {});
+				setStore(canonicalize(changes[STORE_KEY].newValue || {}));
 			}
 		};
 		chrome.storage?.onChanged?.addListener(onChanged);
@@ -49,20 +60,30 @@ export function useMySites() {
 		}
 	};
 
-	const remove = useCallback((origin) => {
+	// `key` is the record's canonical store key as reported by listSites over
+	// the canonicalized snapshot above; the background migrates before
+	// applying, so the same key addresses the record on both sides.
+	const remove = useCallback((key) => {
 		const lib = wpMySites();
-		setStore((cur) => (lib && cur ? lib.removeSite(cur, origin) : cur));
-		sendMutation({ op: 'remove', origin });
+		setStore((cur) => (lib && cur ? lib.removeSite(cur, key) : cur));
+		sendMutation({ op: 'remove', key });
 	}, []);
 
-	const rename = useCallback((origin, name) => {
+	const rename = useCallback((key, name) => {
 		const lib = wpMySites();
-		setStore((cur) => (lib && cur ? lib.renameSite(cur, origin, name) : cur));
-		sendMutation({ op: 'rename', origin, name });
+		setStore((cur) => (lib && cur ? lib.renameSite(cur, key, name) : cur));
+		sendMutation({ op: 'rename', key, name });
 	}, []);
 
 	const lib = wpMySites();
 	const sites = lib && store ? lib.listSites(store) : [];
 
-	return { sites, remove, rename, ready: store !== null, displayName: lib?.displayName };
+	return {
+		sites,
+		remove,
+		rename,
+		ready: store !== null,
+		displayName: lib?.displayName,
+		defaultLabel: lib?.defaultLabel,
+	};
 }
