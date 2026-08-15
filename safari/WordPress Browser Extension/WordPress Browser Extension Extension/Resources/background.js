@@ -12,12 +12,19 @@
 
 // Pure My Sites store helpers, attached to globalThis.WPMySites — shared with
 // the popup, which loads the same file as a classic script.
-importScripts('lib/my-sites.js');
-
-// REST helpers (globalThis.WPRest). The edit-this-page keyboard shortcut reuses
-// resolveEditUrlSync from here rather than maintaining a second copy of the
-// admin-URL priority chain and its same-origin guard.
-importScripts('lib/rest.js');
+//
+// importScripts() only exists in a real service worker (Chrome's MV3
+// background). Firefox runs this file as an event page instead — a plain
+// script context, not a worker — where importScripts is undefined. There,
+// manifest.json's background.scripts array already loads lib/my-sites.js and
+// lib/rest.js ahead of this file, so the guard below is a no-op on Firefox
+// rather than a missing dependency.
+if (typeof importScripts === 'function') {
+  // REST helpers (globalThis.WPRest). The edit-this-page keyboard shortcut
+  // reuses resolveEditUrlSync from here rather than maintaining a second copy
+  // of the admin-URL priority chain and its same-origin guard.
+  importScripts('lib/my-sites.js', 'lib/rest.js');
+}
 
 // Detection results are cached one storage key per origin (wp_cache_<origin>)
 // rather than a single blob, so a page load reads and writes only its own
