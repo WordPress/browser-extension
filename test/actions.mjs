@@ -278,12 +278,14 @@ console.log('\n[43] synthesized targets from a subdirectory admin base (#88)');
 
 console.log('\n[44] cache-only fallback recovers the admin base from the tab pathname (#88)');
 {
-	// The orphaned-content-script path: an already-open subdirectory
-	// wp-admin tab where tabs.sendMessage fails, cached WordPress detection
-	// exists, and only the direct DOM probe answers. The synthesized context
-	// carries no baseUrl; adminBaseFromProbe must recover the install base
-	// from the tab's own pathname — gated on the probe confirming a real
-	// admin document — using lib/detect.js's exact rules.
+	// Models the orphaned-content-script scenario at the helper seam (an
+	// already-open subdirectory wp-admin tab, messaging dead, cached
+	// detection present, probe confirming the admin document): covers
+	// adminBaseFromProbe's derivation contract with the REAL lib/detect.js
+	// and the recovered base flowing into real target synthesis. The React
+	// hook wiring itself (probe field → merge call in useDetection) is not
+	// driven here — the repo has no React harness; that remains build- and
+	// review-verified. True pipeline coverage is a possible follow-up.
 	const detectSrc = readFileSync(join(__dirname, '..', 'lib', 'detect.js'), 'utf8');
 	const libCtx = {};
 	new Function('globalThis', detectSrc)(libCtx);
