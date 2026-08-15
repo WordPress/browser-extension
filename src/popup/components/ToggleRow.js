@@ -15,8 +15,17 @@ export function ToggleRow({ icon, label, checked, onChange, disabled = false, se
 	const [animatable, setAnimatable] = useState(false);
 	useEffect(() => {
 		if (!settled || animatable) return undefined;
-		const id = requestAnimationFrame(() => setAnimatable(true));
-		return () => cancelAnimationFrame(id);
+		// Double rAF: the first fires just before the paint that shows the
+		// corrected stored state; the second fires only after that paint has
+		// committed, so re-enabling transitions can never animate the settle.
+		let second = 0;
+		const first = requestAnimationFrame(() => {
+			second = requestAnimationFrame(() => setAnimatable(true));
+		});
+		return () => {
+			cancelAnimationFrame(first);
+			if (second) cancelAnimationFrame(second);
+		};
 	}, [settled, animatable]);
 
 	return (

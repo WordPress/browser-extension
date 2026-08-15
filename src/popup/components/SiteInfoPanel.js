@@ -17,9 +17,13 @@ export function SiteInfoPanel({ ctx, origin, baseUrl, onOpen }) {
 	// Carries any subdirectory prefix for synthesized admin links (#33).
 	const base = baseUrl || origin;
 	const [open, setOpen] = useState(false);
-	const triggerRef = usePanelReveal(open);
 	const [data, setData] = useState(null);
 	const [loading, setLoading] = useState(false);
+	// Reveal only once the lazy site-info fetch has settled: the panel's
+	// height isn't final until then, and the one-shot reveal must measure the
+	// real panel, not the loading stub. First open fires the reveal when
+	// loading completes; reopens (data cached, loading false) fire on open.
+	const triggerRef = usePanelReveal(open && !loading);
 	const [attempted, setAttempted] = useState(false);
 	const fetchStartedRef = useRef(false);
 	const snapshotRef = useRef({ pluginSlugs: [], themeSlug: null });
