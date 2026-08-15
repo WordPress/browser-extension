@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { adminBaseFromProbe } from '../lib/adminBase';
 
 // Poll the content script for live detection until it answers or a short
 // budget elapses. Content scripts inject at document_idle, so a popup opened
@@ -118,6 +119,10 @@ export function useDetection() {
 							const ab = document.getElementById('wpadminbar');
 							const body = document.body;
 							const bodyLoggedIn = body?.classList?.contains('logged-in') || false;
+							// admin_body_class prints `wp-admin` on every core admin
+							// page and never on the front end — the same gate
+							// lib/detect.js uses before trusting the pathname (#88).
+							const bodyAdmin = body?.classList?.contains('wp-admin') || false;
 							// Site icon — same priority order and same scheme allowlist
 							// as detect.js. Captured here too so the popup still has
 							// it when the content script is unavailable (extension
@@ -145,6 +150,7 @@ export function useDetection() {
 							if (!ab) return {
 								hasAdminBar: false,
 								bodyLoggedIn,
+								bodyAdmin,
 								hasQueryMonitor: !!qmPanel,
 								qmOpen,
 								siteIconUrl,
@@ -195,6 +201,7 @@ export function useDetection() {
 							return {
 								hasAdminBar: true,
 								bodyLoggedIn,
+								bodyAdmin,
 								adminBarEditHref: edit?.href || null,
 								adminBarViewHref: view?.href || preview?.href || null,
 								adminBarLogoutHref: logout?.href || null,
@@ -219,6 +226,18 @@ export function useDetection() {
 						// Distinct from `isLoggedIn`, which can be true via the
 						// cookie API even when the page DOM is logged-out HTML.
 						lc.bodyLoggedIn = !!live.bodyLoggedIn;
+						// Cache-only fallback (#88): a context synthesized from the
+						// detection cache has no baseUrl (the orphaned content
+						// script never reported one), which collapsed synthesized
+						// admin links to the bare origin on subdirectory installs.
+						// When the probe confirms a real admin document, recover
+						// the base from the tab's own pathname with lib/detect.js's
+						// rules. Live detections always carry a baseUrl and are
+						// never overridden.
+						if (!lc.baseUrl) {
+							const derived = adminBaseFromProbe(origin, url.pathname, !!live.bodyAdmin);
+							if (derived) lc.baseUrl = derived;
+						}
 						if (live.siteIconUrl) lc.siteIconUrl = live.siteIconUrl;
 						if (live.hasAdminBar) {
 							lc.hasAdminBar = true;

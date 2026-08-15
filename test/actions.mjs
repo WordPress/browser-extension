@@ -276,5 +276,68 @@ console.log('\n[43] synthesized targets from a subdirectory admin base (#88)');
 		'non-http Visit Site href rejected, base used');
 }
 
+console.log('\n[44] cache-only fallback recovers the admin base from the tab pathname (#88)');
+{
+	// The orphaned-content-script path: an already-open subdirectory
+	// wp-admin tab where tabs.sendMessage fails, cached WordPress detection
+	// exists, and only the direct DOM probe answers. The synthesized context
+	// carries no baseUrl; adminBaseFromProbe must recover the install base
+	// from the tab's own pathname — gated on the probe confirming a real
+	// admin document — using lib/detect.js's exact rules.
+	const detectSrc = readFileSync(join(__dirname, '..', 'lib', 'detect.js'), 'utf8');
+	const libCtx = {};
+	new Function('globalThis', detectSrc)(libCtx);
+	const adminBaseSrc = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'adminBase.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+	const { adminBaseFromProbe } = new Function('window', `${adminBaseSrc}\nreturn { adminBaseFromProbe };`)(
+		{ WPDetect: libCtx.WPDetect },
+	);
+
+	const O = 'https://www.example.com';
+	assert(adminBaseFromProbe(O, '/en-us/research/wp-admin/edit.php', true) === `${O}/en-us/research`,
+		'an open subdirectory wp-admin tab recovers its full install base');
+	assert(adminBaseFromProbe(O, '/guides/wp-admin/security/', false) === null,
+		'a public URL containing /wp-admin/ derives nothing without body.wp-admin');
+	assert(adminBaseFromProbe(O, '/en-us/research///wp-admin/', true) === `${O}/en-us/research`,
+		'trailing slash runs are trimmed');
+	assert(adminBaseFromProbe(O, '/a%2Fb/wp-admin/', true) === O,
+		'encoded slashes fail closed to the bare origin');
+	assert(adminBaseFromProbe(O, '/wp-admin/index.php', true) === O,
+		'a root install derives the bare origin');
+	assert(adminBaseFromProbe(O, '/en-us/research/wp-admin/edit.php', undefined) === null,
+		'an unconfirmed probe derives nothing');
+
+	// The recovered base must flow into synthesized targets exactly like a
+	// live-detected one — the user story from the report: reopening the
+	// popup on that tab, Admin/Profile/Login retain /en-us/research.
+	const derived = adminBaseFromProbe(O, '/en-us/research/wp-admin/edit.php', true);
+	const restSrc = readFileSync(join(__dirname, '..', 'lib', 'rest.js'), 'utf8');
+	const restCtx = {};
+	new Function('globalThis', 'document', 'window', restSrc)(restCtx, undefined, undefined);
+	const run = async (action, args) => {
+		const targets = [];
+		const chrome = {
+			tabs: {
+				update: async ({ url }) => { targets.push(url); },
+				create: async ({ url }) => { targets.push(url); },
+			},
+			runtime: { sendMessage: async () => {} },
+		};
+		const loader = new Function('chrome', 'window', 'navigator', `${actionsSrc}\nreturn { runAction };`);
+		const { runAction } = loader(chrome, { close: () => {}, WPRest: restCtx.WPRest }, { vendor: '' });
+		await runAction(action, args);
+		return targets[0] || null;
+	};
+	const args = { origin: O, baseUrl: derived, url: `${O}/en-us/research/wp-admin/edit.php` };
+	assert(await run('admin', args) === `${O}/en-us/research/wp-admin/`,
+		'Admin target from the recovered base retains /en-us/research');
+	assert(await run('profile', args) === `${O}/en-us/research/wp-admin/profile.php`,
+		'Profile target from the recovered base retains /en-us/research');
+	assert(await run('login', args) === `${O}/en-us/research/wp-login.php`,
+		'Log In target from the recovered base retains /en-us/research');
+}
+
 console.log(`\n${failures === 0 ? 'Popup action tests passed.' : failures + ' failure(s).'}`);
 process.exit(failures === 0 ? 0 : 1);
