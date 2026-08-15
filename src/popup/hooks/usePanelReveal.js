@@ -1,13 +1,18 @@
 import { useEffect, useRef } from 'react';
 
 /**
- * Safari popup only: when a collapsible panel opens, the popup no longer grows
- * to fit it — it is locked to its baseline height and scrolls internally (see
- * App.js useSafariPopupLock). So a panel opened below the fold reveals its rows
- * off-screen. Scroll the panel's header to the top of the popup so the freshly
- * revealed content is visible without a manual scroll.
+ * When a collapsible section opens below the fold, scroll so as much of its
+ * panel as possible becomes visible — without ever pushing the section's own
+ * header out of view. `scrollIntoView({ block: 'nearest' })` on the section
+ * (header + panel together) is exactly that contract: fully visible → no
+ * scroll; partially cut off → the minimal scroll that reveals it; taller
+ * than the viewport → the header pins to the top showing maximum content.
  *
- * No-op on Chrome, where the popup grows to fit and no scroll is needed.
+ * Browser-agnostic by construction: whenever the popup can still grow to fit
+ * (Chrome below its height clamp), nothing is scrollable and the call is a
+ * natural no-op. Once a scroll host exists — Safari's locked popover
+ * (.wpd-scroll, see useSafariPopupLock) or Chrome's clamped body — the same
+ * rule reveals the panel there.
  *
  * Usage:
  *   const triggerRef = usePanelReveal(open);
@@ -19,10 +24,9 @@ export function usePanelReveal(open) {
 	const armed = useRef(false);
 
 	// Arm only after the popup has settled and (on Safari) locked its baseline
-	// height. Before that the popup still grows to fit, so an opening panel needs
-	// no scroll — and this skips hydration / persisted opens (e.g. Developer
-	// Tools restoring its open state from storage) that would otherwise scroll
-	// on mount and fight the baseline measurement.
+	// height. This skips hydration / persisted opens (e.g. Developer Tools
+	// restoring its open state from storage) that would otherwise scroll on
+	// mount and fight the baseline measurement.
 	useEffect(() => {
 		const t = setTimeout(() => { armed.current = true; }, 400);
 		return () => clearTimeout(t);
@@ -31,15 +35,20 @@ export function usePanelReveal(open) {
 	useEffect(() => {
 		const justOpened = open && !wasOpen.current;
 		wasOpen.current = open;
-		if (!justOpened || !armed.current) return;
-		// navigator.vendor is 'Apple Computer, Inc.' only on Safari.
-		if (navigator.vendor !== 'Apple Computer, Inc.') return;
-		const el = ref.current;
-		if (!el || typeof el.scrollIntoView !== 'function') return;
-		// Defer one frame so the expand has begun laying out before we scroll.
-		requestAnimationFrame(() => {
-			el.scrollIntoView({ block: 'start', behavior: 'smooth' });
-		});
+		if (!justOpened || !armed.current) return undefined;
+		const trigger = ref.current;
+		if (!trigger) return undefined;
+		// Defer past the expand's layout and past Chrome's popup re-size: when
+		// the window can still grow it has by the time this fires, nothing is
+		// scrollable, and the reveal no-ops instead of fighting the growth.
+		const t = setTimeout(() => {
+			const section = trigger.parentElement || trigger;
+			if (typeof section.scrollIntoView !== 'function') return;
+			const reduce = typeof window.matchMedia === 'function'
+				&& window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+			section.scrollIntoView({ block: 'nearest', behavior: reduce ? 'auto' : 'smooth' });
+		}, 200);
+		return () => clearTimeout(t);
 	}, [open]);
 
 	return ref;
