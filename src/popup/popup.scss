@@ -111,7 +111,6 @@ body {
 	 * displacing content. The clipped 10px strip contains only padding. */
 	width: var(--wpd-width);
 	min-height: 140px;
-	animation: wpd-rise 0.24s cubic-bezier(0.2, 0.6, 0.2, 1);
 }
 
 /* Scroll host for the Safari popup-sizing fix (see App.js useSafariPopupLock).
@@ -158,17 +157,6 @@ body::-webkit-scrollbar-thumb:hover,
 	/* Own block formatting context so a child's top margin can't collapse
 	 * through the wrapper and skew the measured baseline height. */
 	display: flow-root;
-}
-
-@keyframes wpd-rise {
-	from {
-		opacity: 0;
-		transform: translateY(-3px);
-	}
-	to {
-		opacity: 1;
-		transform: translateY(0);
-	}
 }
 
 /* Header ================================================================ */
