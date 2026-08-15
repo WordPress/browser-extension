@@ -291,6 +291,11 @@ body::-webkit-scrollbar-thumb:hover,
 .wpd-user-menu__dropdown {
 	min-width: 200px;
 	padding: 6px;
+	// The library's popover positioner carries text-align: end, which
+	// inherits into this surface and right-shifted the header name (the
+	// flex-laid-out items never showed it). Declare our own alignment so
+	// upstream defaults never decide it.
+	text-align: left;
 	background: var(--wpd-surface);
 	border: 1px solid var(--wpd-border);
 	border-radius: var(--wpd-radius);
