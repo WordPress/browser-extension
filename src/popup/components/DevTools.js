@@ -14,7 +14,7 @@ export function DevTools({ origin, url, hasQueryMonitor = false, qmOpen = false 
 	const [open, setOpen] = useState(false);
 	const triggerRef = usePanelReveal(open);
 	const [hydrated, setHydrated] = useState(false);
-	const [prefs, savePref] = usePrefs(origin);
+	const [prefs, savePref, prefsReady] = usePrefs(origin);
 	// Local mirror of QM panel state — `qmOpen` from props is the snapshot
 	// at popup-open time; clicks update optimistically.
 	const [qmChecked, setQmChecked] = useState(qmOpen);
@@ -59,6 +59,7 @@ export function DevTools({ origin, url, hasQueryMonitor = false, qmOpen = false 
 						label={chrome.i18n.getMessage('highlight_blocks_toggle') /* "Highlight Blocks" */}
 						checked={!!prefs.blockInspectorEnabled}
 						onChange={toggleBlockInspector}
+						settled={prefsReady}
 					/>
 					<ActionRow
 						icon={mobile}

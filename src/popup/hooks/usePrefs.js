@@ -11,14 +11,23 @@ function mergePrefs(globalPrefs, originPrefs) {
 }
 
 export function usePrefs(origin) {
-	const [prefs, setPrefs] = useState(DEFAULT_PREFS);
+	// `ready` flips once the stored values have actually been read. Consumers
+	// rendering animated state (the toggle switches) use it to keep the
+	// settle from defaults to stored values from playing as a transition.
+	const [state, setState] = useState({ prefs: DEFAULT_PREFS, ready: false });
+	const prefs = state.prefs;
+	const setPrefs = (updater) =>
+		setState((prev) => ({
+			...prev,
+			prefs: typeof updater === 'function' ? updater(prev.prefs) : updater,
+		}));
 
 	useEffect(() => {
 		if (!origin) return;
 		(async () => {
 			const data = await chrome.storage.local.get(PREFS_KEY);
 			const all = data[PREFS_KEY] || {};
-			setPrefs(mergePrefs(all[GLOBAL_NS] || {}, all[origin] || {}));
+			setState({ prefs: mergePrefs(all[GLOBAL_NS] || {}, all[origin] || {}), ready: true });
 		})();
 	}, [origin]);
 
@@ -38,5 +47,5 @@ export function usePrefs(origin) {
 		[origin],
 	);
 
-	return [prefs, savePref];
+	return [prefs, savePref, state.ready];
 }

@@ -613,6 +613,14 @@ body::-webkit-scrollbar-thumb:hover,
 	}
 }
 
+// Transition-suppressed variant for the settle-from-storage paint (see
+// ToggleRow): the async pref read may flip state right after first render,
+// and that correction must snap into place, not play as a slide.
+.wpd-switch.no-anim,
+.wpd-switch.no-anim .wpd-switch__thumb {
+	transition: none;
+}
+
 /* Inline confirm — destructive variant of card-row --------------------- */
 
 .wpd-card-row.is-destructive {

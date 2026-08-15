@@ -215,7 +215,7 @@ function useEditShortcutHint() {
 }
 
 function FrontendLoggedInActions({ ctx, origin, baseUrl, url, user }) {
-	const [prefs, savePref] = usePrefs(origin);
+	const [prefs, savePref, prefsReady] = usePrefs(origin);
 	const { editUrl, resolving, isBlockTheme } = useEditUrlResolution(ctx, origin);
 	const adminEnabled = useAdminEnabled(ctx, user);
 	// false = the user definitively can't edit this object; null/true (unknown
@@ -259,7 +259,7 @@ function FrontendLoggedInActions({ ctx, origin, baseUrl, url, user }) {
 				onClick={() => runAction('admin', { origin, baseUrl, url })}
 				onNewTab={() => runAction('admin', { origin, baseUrl, url, newTab: true })}
 			/>
-			<AdminBarSection ctx={ctx} origin={origin} baseUrl={baseUrl} prefs={prefs} onToggle={toggleAdminBar} />
+			<AdminBarSection ctx={ctx} origin={origin} baseUrl={baseUrl} prefs={prefs} prefsReady={prefsReady} onToggle={toggleAdminBar} />
 		</>
 	);
 }
@@ -283,9 +283,9 @@ function LoggedOutActions({ origin, baseUrl, url }) {
 	);
 }
 
-function AdminBarSection({ ctx, origin, baseUrl, prefs, onToggle }) {
+function AdminBarSection({ ctx, origin, baseUrl, prefs, prefsReady, onToggle }) {
 	if (ctx.hasAdminBar) {
-		return <ToggleRow icon={seen} label={chrome.i18n.getMessage('show_admin_bar') /* "Show Admin Bar" */} checked={!prefs.adminBarHidden} onChange={onToggle} />;
+		return <ToggleRow icon={seen} label={chrome.i18n.getMessage('show_admin_bar') /* "Show Admin Bar" */} checked={!prefs.adminBarHidden} onChange={onToggle} settled={prefsReady} />;
 	}
 	// Logged-in but no admin bar — could be a profile preference, a theme
 	// filter (show_admin_bar(false) or unhooking wp_admin_bar_render), or
