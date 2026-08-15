@@ -8,7 +8,7 @@
     "description": "Short name shown where space is limited"
   },
   "ext_description": {
-    "message": "Бърз достъп до вашите WordPress сайтове, редактиране на съдържание и инструменти за разработчици. Скрийте админ лентата.",
+    "message": "Бърз достъп до WordPress сайтове, редакция на съдържание и инструменти за разработчици. Скрийте админ лентата.",
     "description": "Extension description shown in the browser's extension store and management pages. The Chrome Web Store shows it as the listing summary and enforces a 132-character limit."
   },
   "ext_action_title": {
