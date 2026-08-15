@@ -71,11 +71,13 @@ body {
 	padding: 0;
 }
 
-/* Chrome's popup window is a hard-edged rectangle on most platforms — CSS
- * border-radius on `html` is ignored by the native frame. The visual trick:
- * make html itself the rounded surface and give it a uniform background that
- * matches body, so the popup reads as one continuous rounded card even where
- * the native frame is technically square underneath. */
+/* The popup's corner shape belongs to the native frame: current Chrome on
+ * macOS and Windows rounds popup windows itself and clips everything —
+ * including full-bleed hover fills — to the real window shape, and Safari's
+ * popover bubble does the same. A CSS radius here drew a second, slightly
+ * mismatched curve inside the real one, and any edge-to-edge fill exposed
+ * the seam. On platforms with square frames the popup is simply square,
+ * like every other extension there. */
 html {
 	/* Pin the outermost box too, not just body: Chrome recomputes the popup
 	 * window size when the body scrollbar appears (content passing the ~600px
@@ -84,7 +86,6 @@ html {
 	 * says 380. */
 	width: var(--wpd-width);
 	background: var(--wpd-bg);
-	border-radius: var(--wpd-popup-radius, 12px);
 	overflow: hidden;
 }
 
@@ -96,7 +97,6 @@ body {
 	font-size: var(--wpds-typography-font-size-md, 13px);
 	line-height: var(--wpds-typography-line-height-sm, 20px);
 	-webkit-font-smoothing: antialiased;
-	border-radius: inherit;
 	overflow-x: hidden;
 	/* Chrome clamps popups to ~600px tall; let the body scroll vertically so
 	 * long content (logged-in + dev tools open) stays reachable. */
