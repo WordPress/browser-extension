@@ -17,6 +17,16 @@ const mySitesSrc = read('lib', 'my-sites.js');
 const restSrc = read('lib', 'rest.js');
 const backgroundSrc = read('background.js');
 
+/** The popup's own base-recovery helper, wired to the REAL lib/detect.js, so
+ * the frontend seam and the background gate are exercised as one pipeline
+ * rather than two separately-mocked halves. */
+function loadAdminBaseFromProbe() {
+  const detectCtx = {};
+  new Function('globalThis', read('lib', 'detect.js'))(detectCtx);
+  const src = read('src', 'popup', 'lib', 'adminBase.js').replace(/^export /gm, '');
+  return new Function('window', `${src}\nreturn adminBaseFromProbe;`)({ WPDetect: detectCtx.WPDetect });
+}
+
 let failures = 0;
 function assert(cond, msg) {
   if (!cond) { failures++; console.error('  FAIL:', msg); }
@@ -383,7 +393,7 @@ async function main() {
         hostFromDOM: 'selfhosted',
       }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
 
-      // deriveBaseUrl reports the bare origin as a FALLBACK for pages with
+      // deriveBase reports the bare origin as a FALLBACK for pages with
       // no derivation evidence (wp-login.php, REST-stripped fronts). Such a
       // page must not mint a speculative bare-origin row — and neither must
       // root-EQUIVALENT variants (trailing slash, query/fragment-only) or
@@ -416,6 +426,160 @@ async function main() {
       assert(after[SA]?.dismissed === true, 'no passive detection revives the removed install');
       assert(Object.keys(after).length === 2, 'and no sibling or origin duplicate was minted');
       assert(after[HOST]?.dismissed === undefined, 'the root record is untouched');
+    }
+    {
+      // #103: a root install browsed only through wp-admin. admin_head prints
+      // no REST discovery link, so #94's gate saw the bare-origin base, read
+      // it as the no-evidence FALLBACK, and dropped every login — the site
+      // never entered My Sites however often it was visited. baseUrlEvidence
+      // separates the two, and the browser-attested pathname cross-checks it.
+      const storage = makeStorage({});
+      const { send } = loadBackground(storage);
+      const detect = (path, ctx) => send({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 90, signals: ['admin-bar-element'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+
+      await detect('/wp-admin/index.php',
+        { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await settle();
+      assert(!!storage.read(MY_SITES_KEY)?.[HOST],
+        "a root install's wp-admin screen is recorded (#103)");
+
+      // Still no speculative rows: an admin-path CLAIM whose browser-attested
+      // path has no wp-admin segment is a lie or an accident (a theme adding
+      // `wp-admin` to a front-end body class), and a subdirectory install
+      // must not be able to claim the root that way.
+      const storage2 = makeStorage({});
+      const { send: send2 } = loadBackground(storage2);
+      const detect2 = (path, ctx) => send2({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 90, signals: ['admin-bar-element'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+      await detect2('/blog/hello-world/', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await detect2('/', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await detect2('/wp-administration/x', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await detect2('/sub%2Fdir/wp-admin/', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await detect2('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: null });
+      await detect2('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'rest' });
+      await settle();
+      assert(Object.keys(storage2.read(MY_SITES_KEY) || {}).length === 0,
+        'an admin-path claim unsupported by the browser-attested path mints nothing');
+
+      // The popup's resolution path applies the same gate (cookie-API logins
+      // on an admin screen, and the #88 cache-only fallback).
+      const storage3 = makeStorage({});
+      const { send: send3 } = loadBackground(storage3);
+      await send3({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/wp-admin/options-general.php',
+      }, POPUP_SENDER);
+      await settle();
+      assert(!!storage3.read(MY_SITES_KEY)?.[HOST],
+        'the popup resolution records a root install from its admin screen too');
+      await send3({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/not-admin/',
+      }, POPUP_SENDER);
+      await settle();
+      assert(Object.keys(storage3.read(MY_SITES_KEY)).length === 1,
+        'and rejects the same claim from a non-admin path');
+
+      // Sticky removal still holds against the new evidence path.
+      const storage4 = makeStorage({});
+      const { send: send4 } = loadBackground(storage4);
+      const detect4 = (path, ctx) => send4({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 90, signals: ['admin-bar-element'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+      await detect4('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await send4({ type: 'MUTATE_MY_SITES', op: 'remove', key: HOST }, POPUP_SENDER);
+      await settle();
+      await detect4('/wp-admin/edit.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await settle();
+      const after103 = storage4.read(MY_SITES_KEY);
+      assert(after103[HOST]?.dismissed === true && Object.keys(after103).length === 1,
+        'a dismissed root install is not revived by a later admin visit');
+
+      // The reporter's scenario: several managed sites, admin-only browsing.
+      const storage5 = makeStorage({});
+      const { send: send5 } = loadBackground(storage5);
+      for (const name of ['a', 'b', 'c', 'd', 'e']) {
+        const origin = `https://client-${name}.example`;
+        const url = `${origin}/wp-admin/index.php`;
+        await send5({
+          type: 'WP_DETECTION',
+          detection: {
+            isWordPress: true, confidence: 90, signals: ['admin-bar-element'],
+            context: { isLoggedIn: true, baseUrl: origin, baseUrlEvidence: 'admin-path' },
+          },
+          hostFromDOM: 'selfhosted',
+        }, { url, origin, tab: { id: 7, url } });
+      }
+      await settle();
+      assert(Object.keys(storage5.read(MY_SITES_KEY) || {}).length === 5,
+        'five admin-only managed sites all persist (the reported symptom)');
+
+      // The browser-attested path falls back to the sender TAB's url when
+      // sender.url is absent (content scripts are top-frame only, so the two
+      // agree). Without that fallback the gate — and the pre-existing
+      // subdirectory login attribution — would silently lose the path.
+      const storage6 = makeStorage({});
+      const { send: send6 } = loadBackground(storage6);
+      await send6({
+        type: 'WP_DETECTION',
+        detection: {
+          isWordPress: true, confidence: 90, signals: ['admin-bar-element'],
+          context: { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' },
+        },
+        hostFromDOM: 'selfhosted',
+      }, { origin: HOST, tab: { id: 7, url: `${HOST}/wp-admin/index.php` } });
+      await settle();
+      assert(!!storage6.read(MY_SITES_KEY)?.[HOST],
+        'the path is recovered from sender.tab.url when sender.url is absent');
+
+      // Frontend → backend as one pipeline: the popup's #88 cache-only
+      // fallback (orphaned content script, no live baseUrl) recovers the base
+      // with the real adminBaseFromProbe, and the resulting payload has to
+      // clear the real gate. The React hook's own assignments are the only
+      // link not driven here — the repo has no React harness.
+      const adminBaseFromProbe = loadAdminBaseFromProbe();
+      const resolveFromProbe = async (send, tabPath, bodyAdmin) => {
+        const derived = adminBaseFromProbe(HOST, tabPath, bodyAdmin);
+        return send({
+          type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+          baseUrl: derived?.baseUrl || null,
+          baseUrlEvidence: derived?.evidence || null,
+          pathname: tabPath,
+        }, POPUP_SENDER);
+      };
+
+      const storage7 = makeStorage({});
+      const { send: send7 } = loadBackground(storage7);
+      await resolveFromProbe(send7, '/wp-admin/index.php', true);
+      await settle();
+      assert(!!storage7.read(MY_SITES_KEY)?.[HOST],
+        'popup fallback → gate: a root install recovered from its admin tab records');
+
+      const storage8 = makeStorage({});
+      const { send: send8 } = loadBackground(storage8);
+      await resolveFromProbe(send8, '/siteA/wp-admin/edit.php', true);
+      await settle();
+      assert(!!storage8.read(MY_SITES_KEY)?.[SA],
+        'popup fallback → gate: a subdirectory install keys by its install base');
+
+      const storage9 = makeStorage({});
+      const { send: send9 } = loadBackground(storage9);
+      // Not an admin document (probe unconfirmed), and a fail-closed encoded
+      // slash: both must reach the gate with no evidence and mint nothing.
+      await resolveFromProbe(send9, '/guides/wp-admin/security/', false);
+      await resolveFromProbe(send9, '/sub%2Fdir/wp-admin/', true);
+      await settle();
+      assert(Object.keys(storage9.read(MY_SITES_KEY) || {}).length === 0,
+        'popup fallback → gate: unconfirmed and fail-closed probes mint nothing');
     }
     {
       // v1.0.1 ambiguity, end to end: a subdirectory install seen only via

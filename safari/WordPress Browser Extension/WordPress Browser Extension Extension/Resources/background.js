@@ -102,18 +102,38 @@ function enqueueStorageWrite(mutate) {
 
 // --- My Sites: persistent list of WP installs the user logs into ----------
 
-// Trustworthy install-base evidence only (#94): deriveBaseUrl falls back to
-// the bare origin for pages carrying no derivation evidence (no REST
-// discovery link, not an admin screen), and a speculative bare-origin My
-// Sites row must never be minted from such a page. A subdirectory PATH only
-// ever comes from real evidence (REST link or admin pathname); any
-// root-equivalent value (the bare origin, or slash/query/fragment variants
-// of it — decided on the CANONICALIZED candidate, not string equality)
-// counts only when this page's own REST discovery link confirms a root
-// install. Both URLs must be http(s): schemes like blob: can parse to a
-// same-origin `origin` while being nothing of the sort. Everything returned
-// here is re-sanitized at the storage boundary.
-function evidenceBackedBase(origin, baseUrl, restApiRoot) {
+// Trustworthy install-base evidence only (#94): deriveBase falls back to the
+// bare origin for pages carrying no derivation evidence, and a speculative
+// bare-origin My Sites row must never be minted from such a page. A
+// subdirectory PATH only ever comes from real evidence; any root-equivalent
+// value (the bare origin, or slash/query/fragment variants of it — decided on
+// the CANONICALIZED candidate, not string equality) needs the page to CONFIRM
+// the install is at the root, which either derivation can do:
+//
+//   - `evidence: 'admin-path'` — WordPress serves wp-admin at <install
+//     base>/wp-admin/, so an admin document at <origin>/wp-admin/… fixes the
+//     base at the origin definitionally, as strongly as the REST link does.
+//     Only the VALUE is ambiguous with the fallback; `evidence` settles it.
+//     Without this a root install browsed solely through wp-admin — how
+//     people work on sites they manage — never entered My Sites at all
+//     (#103), since admin_head prints no REST discovery link.
+//   - a same-origin http(s) `restApiRoot`. Re-derived here rather than read
+//     off `evidence`, because a content script orphaned by the update to this
+//     build still reports the pre-#103 context shape (no evidence field) and
+//     must keep recording until its tab navigates.
+//
+// `evidence` reaches us through page DOM, so an admin-path claim is
+// cross-checked against `pathname` from the browser-attested sender URL: that
+// path must contain a wp-admin segment. A necessary condition, not a
+// re-derivation — deriveBase stays the single source of truth for the base.
+// It rules out the case that matters in practice: a subdirectory install
+// whose front-end page carries a `wp-admin` body class (themes and plugins
+// can add one) claiming the root as its base.
+//
+// Both URLs must be http(s): schemes like blob: can parse to a same-origin
+// `origin` while being nothing of the sort. Everything returned here is
+// re-sanitized at the storage boundary.
+function evidenceBackedBase(origin, baseUrl, restApiRoot, evidence, pathname) {
   if (!baseUrl || typeof baseUrl !== 'string') return null;
   let canonical;
   try {
@@ -125,6 +145,7 @@ function evidenceBackedBase(origin, baseUrl, restApiRoot) {
     return null;
   }
   if (canonical !== origin) return baseUrl; // real subdirectory path
+  if (evidence === 'admin-path' && isAdminPathname(pathname)) return origin;
   if (!restApiRoot || typeof restApiRoot !== 'string') return null;
   try {
     const r = new URL(restApiRoot, origin);
@@ -133,6 +154,16 @@ function evidenceBackedBase(origin, baseUrl, restApiRoot) {
   } catch (_) {
     return null;
   }
+}
+
+// Does a browser-attested pathname contain a segment-exact `wp-admin`? Segment
+// split rather than substring so /guides/wp-administration/ doesn't qualify,
+// and encoded slashes fail closed the way lib/detect.js's own path handling
+// does — one path must never read as two.
+function isAdminPathname(pathname) {
+  if (typeof pathname !== 'string' || pathname.charAt(0) !== '/') return false;
+  if (/%2f/i.test(pathname)) return false;
+  return pathname.split('/').includes('wp-admin');
 }
 
 // Record a logged-in WordPress site, applying the curation rule in
@@ -253,6 +284,25 @@ function originFromSender(sender) {
   if (sender && sender.origin) return sender.origin;
   try {
     return sender && sender.tab && sender.tab.url ? new URL(sender.tab.url).origin : null;
+  } catch (_) {
+    return null;
+  }
+}
+
+// Pathname of the sending document, likewise browser-attested: sender.url
+// when present, else the sender tab's URL. Same two-source shape as
+// originFromSender, and for the same reason — a My Sites decision must never
+// rest on a path the page could choose. Content scripts are top-frame only
+// (manifest `all_frames: false`), so the two agree; the tab fallback matters
+// where sender.url is unavailable, and both the admin-path evidence check and
+// subdirectory login attribution depend on getting a path at all.
+function pathnameFromSender(sender) {
+  const url = (sender && sender.url)
+    || (sender && sender.tab && sender.tab.url)
+    || null;
+  if (!url) return null;
+  try {
+    return new URL(url).pathname;
   } catch (_) {
     return null;
   }
@@ -475,7 +525,10 @@ async function enforcePreviewSize(winId, width, height) {
 }
 
 async function handlePopupResolution(msg) {
-  const { origin, tabId, isLoggedIn, isWordPress, baseUrl, restApiRoot, siteIconUrl, pathname } = msg;
+  const {
+    origin, tabId, isLoggedIn, isWordPress, baseUrl, restApiRoot,
+    baseUrlEvidence, siteIconUrl, pathname,
+  } = msg;
   if (!origin) return;
   const existing = await getEntry(origin);
   if (existing) {
@@ -487,11 +540,12 @@ async function handlePopupResolution(msg) {
 
   // Catches cookie-API logins the page DOM missed (logged-out HTML).
   if (isWordPress && isLoggedIn) {
+    const path = typeof pathname === 'string' ? pathname : null;
     await recordLogin(
       origin,
-      evidenceBackedBase(origin, baseUrl, restApiRoot),
+      evidenceBackedBase(origin, baseUrl, restApiRoot, baseUrlEvidence, path),
       siteIconUrl,
-      typeof pathname === 'string' ? pathname : null,
+      path,
     );
   }
 }
@@ -566,13 +620,16 @@ async function handleDetection(msg, sender) {
   // sender URL, not the message) or drops it — never a speculative
   // bare-origin row. Removal is sticky, so no prior-state capture is needed.
   if (entry.isWordPress && entry.isLoggedIn) {
-    let pathname = null;
-    try {
-      pathname = new URL(sender.url).pathname;
-    } catch (_) { /* keep null */ }
+    const pathname = pathnameFromSender(sender);
     await recordLogin(
       origin,
-      evidenceBackedBase(origin, detection.context?.baseUrl, detection.context?.restApiRoot),
+      evidenceBackedBase(
+        origin,
+        detection.context?.baseUrl,
+        detection.context?.restApiRoot,
+        detection.context?.baseUrlEvidence,
+        pathname,
+      ),
       detection.context?.siteIconUrl,
       pathname,
     );

@@ -8,10 +8,15 @@
  * pathname using lib/detect.js's rules — final segment-exact wp-admin,
  * encoded slashes fail closed, trailing slash runs trimmed, same-origin
  * enforced. A public URL that merely contains /wp-admin/ never derives
- * (the isAdminDoc gate). Returns null when ungated or unavailable.
+ * (the isAdminDoc gate).
+ *
+ * Returns `{ baseUrl, evidence }` — deriveBase's own provenance, passed
+ * through rather than re-inferred, so the background's My Sites gate can tell
+ * a root install confirmed by its admin path from the bare-origin fallback
+ * (#103). Null when ungated or unavailable.
  */
 export function adminBaseFromProbe(origin, pathname, isAdminDoc) {
 	const detect = typeof window !== 'undefined' ? window.WPDetect : null;
-	if (!isAdminDoc || !detect || typeof detect.deriveBaseUrl !== 'function') return null;
-	return detect.deriveBaseUrl(origin, null, pathname);
+	if (!isAdminDoc || !detect || typeof detect.deriveBase !== 'function') return null;
+	return detect.deriveBase(origin, null, pathname);
 }

@@ -232,11 +232,15 @@ export function useDetection() {
 						// admin links to the bare origin on subdirectory installs.
 						// When the probe confirms a real admin document, recover
 						// the base from the tab's own pathname with lib/detect.js's
-						// rules. Live detections always carry a baseUrl and are
-						// never overridden.
+						// rules, carrying its provenance so a root install reached
+						// only this way can still enter My Sites (#103). Live
+						// detections always carry a baseUrl and are never overridden.
 						if (!lc.baseUrl) {
 							const derived = adminBaseFromProbe(origin, url.pathname, !!live.bodyAdmin);
-							if (derived) lc.baseUrl = derived;
+							if (derived) {
+								lc.baseUrl = derived.baseUrl;
+								lc.baseUrlEvidence = derived.evidence;
+							}
 						}
 						if (live.siteIconUrl) lc.siteIconUrl = live.siteIconUrl;
 						if (live.hasAdminBar) {
@@ -287,11 +291,14 @@ export function useDetection() {
 					isWordPress: true,
 					isLoggedIn: !!result.detection.context.isLoggedIn,
 					baseUrl: result.detection.context.baseUrl || null,
-					// The REST root lets the background tell a REST-confirmed
-					// root install from deriveBaseUrl's bare-origin fallback;
-					// the pathname lets a base-less login be attributed to the
-					// subdirectory install that owns the path (#94).
+					// The REST root and baseUrlEvidence are how the background
+					// tells a CONFIRMED root install — by REST link (#94) or by a
+					// root install's own admin path (#103) — from deriveBase's
+					// bare-origin fallback, which looks identical by value. The
+					// pathname both cross-checks an admin-path claim and lets a
+					// base-less login be attributed to the install owning it (#94).
 					restApiRoot: result.detection.context.restApiRoot || null,
+					baseUrlEvidence: result.detection.context.baseUrlEvidence || null,
 					pathname: url.pathname,
 					siteIconUrl: result.detection.context.siteIconUrl || null,
 				}).catch(() => {});
@@ -335,6 +342,7 @@ export function useDetection() {
 								isLoggedIn: false,
 								baseUrl: lc.baseUrl || null,
 								restApiRoot: lc.restApiRoot || null,
+								baseUrlEvidence: lc.baseUrlEvidence || null,
 								pathname: url.pathname,
 								siteIconUrl: lc.siteIconUrl || null,
 							}).catch(() => {});

@@ -298,23 +298,35 @@ console.log('\n[44] cache-only fallback recovers the admin base from the tab pat
 	);
 
 	const O = 'https://www.example.com';
-	assert(adminBaseFromProbe(O, '/en-us/research/wp-admin/edit.php', true) === `${O}/en-us/research`,
+	// Returns deriveBase's `{ baseUrl, evidence }` pair, not a bare string, so
+	// the provenance travels with the value (#103).
+	const probeBase = (...a) => adminBaseFromProbe(...a)?.baseUrl ?? null;
+	assert(probeBase(O, '/en-us/research/wp-admin/edit.php', true) === `${O}/en-us/research`,
 		'an open subdirectory wp-admin tab recovers its full install base');
 	assert(adminBaseFromProbe(O, '/guides/wp-admin/security/', false) === null,
 		'a public URL containing /wp-admin/ derives nothing without body.wp-admin');
-	assert(adminBaseFromProbe(O, '/en-us/research///wp-admin/', true) === `${O}/en-us/research`,
+	assert(probeBase(O, '/en-us/research///wp-admin/', true) === `${O}/en-us/research`,
 		'trailing slash runs are trimmed');
-	assert(adminBaseFromProbe(O, '/a%2Fb/wp-admin/', true) === O,
+	assert(probeBase(O, '/a%2Fb/wp-admin/', true) === O,
 		'encoded slashes fail closed to the bare origin');
-	assert(adminBaseFromProbe(O, '/wp-admin/index.php', true) === O,
+	assert(probeBase(O, '/wp-admin/index.php', true) === O,
 		'a root install derives the bare origin');
 	assert(adminBaseFromProbe(O, '/en-us/research/wp-admin/edit.php', undefined) === null,
 		'an unconfirmed probe derives nothing');
 
+	// The evidence rides along, so a root install reached only through this
+	// fallback can still enter My Sites; a fail-closed derivation claims none.
+	assert(adminBaseFromProbe(O, '/wp-admin/index.php', true).evidence === 'admin-path',
+		'a recovered root base carries admin-path evidence (#103)');
+	assert(adminBaseFromProbe(O, '/en-us/research/wp-admin/edit.php', true).evidence === 'admin-path',
+		'a recovered subdirectory base carries admin-path evidence too');
+	assert(adminBaseFromProbe(O, '/a%2Fb/wp-admin/', true).evidence === null,
+		'an encoded-slash fail-close claims no evidence, so it mints no My Sites row');
+
 	// The recovered base must flow into synthesized targets exactly like a
 	// live-detected one — the user story from the report: reopening the
 	// popup on that tab, Admin/Profile/Login retain /en-us/research.
-	const derived = adminBaseFromProbe(O, '/en-us/research/wp-admin/edit.php', true);
+	const derived = probeBase(O, '/en-us/research/wp-admin/edit.php', true);
 	const restSrc = readFileSync(join(__dirname, '..', 'lib', 'rest.js'), 'utf8');
 	const restCtx = {};
 	new Function('globalThis', 'document', 'window', restSrc)(restCtx, undefined, undefined);
