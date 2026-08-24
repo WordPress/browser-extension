@@ -99,21 +99,22 @@ export function useDetection() {
 				// lib/pageProbe.js: executeScript serializes it, so it must stay
 				// self-contained, and the module boundary lets tests drive it
 				// against a real DOM.
-				let probeNavigated = false;
+				// Fail closed: only a probe that ran AND reported the captured
+				// tab's own document URL confirms this resolution describes
+				// that document. A missing, failed, malformed, or navigated
+				// probe leaves it unconfirmed — the popup still renders from
+				// captured data, but nothing is pushed to the background and
+				// the credentialed fresh fetch is skipped, so two documents
+				// can never blend into one claim.
+				let probeConfirmed = false;
 				try {
 					const [out] = await chrome.scripting.executeScript({
 						target: { tabId: tab.id },
 						func: probePageState,
 					});
 					const live = out?.result;
-					// The tab can navigate during the async work above, in which
-					// case the probe's DOM facts describe a different document
-					// than the URL this resolution was built for. The probe
-					// reports its own document URL; on a mismatch, discard it
-					// wholesale and skip the resolution pushes below — never
-					// blend two documents into one claim.
-					probeNavigated = !!(live && !probeMatchesTab(live.href, tab.url));
-					if (live && !probeNavigated) {
+					probeConfirmed = !!(live && probeMatchesTab(live.href, tab.url));
+					if (probeConfirmed) {
 						const lc = result.detection.context;
 						// `bodyLoggedIn` reflects WP's `body.logged-in` body class —
 						// i.e., the page render came from an authenticated request.
@@ -182,12 +183,14 @@ export function useDetection() {
 
 				// Push the popup's final resolution back to the background so the
 				// toolbar icon and cache reflect any login override that DOM-based
-				// detection missed (cookie API). Fire-and-forget. Skipped when the
-				// tab navigated mid-resolve: the captured pathname no longer
-				// describes the tab, and a resolution pairs its claims with that
-				// pathname — the next popup open (or the new page's own content
-				// script) resolves the fresh document instead.
-				if (!probeNavigated) {
+				// detection missed (cookie API). Fire-and-forget. Only a
+				// probe-confirmed resolution is pushed: a resolution pairs its
+				// claims with the captured pathname, and without confirmation the
+				// document may not be the one that pathname names — the next
+				// popup open (or the page's own content script, whose claims the
+				// background checks against browser-attested sender data)
+				// resolves it instead.
+				if (probeConfirmed) {
 					chrome.runtime.sendMessage({
 						type: 'POPUP_DETECTION_RESOLVED',
 						origin,
@@ -222,10 +225,10 @@ export function useDetection() {
 				// request. Re-fetch with credentials and merge admin-bar-derived
 				// fields (edit href, +New menu, sign-out nonce, etc.) so the
 				// popup gets richer over time. We don't overwrite hasAdminBar —
-				// the live DOM still lacks the bar. Skipped after a mid-resolve
-				// navigation for the same reason as the push above: the fresh
-				// fetch would describe the new document under the old capture.
-				if (!probeNavigated && loggedInByCookie && !result.detection.context.hasAdminBar) {
+				// the live DOM still lacks the bar. Gated on probe confirmation
+				// for the same reason as the push above: unconfirmed, the fresh
+				// fetch could describe a different document than the capture.
+				if (probeConfirmed && loggedInByCookie && !result.detection.context.hasAdminBar) {
 					try {
 						const fresh = await Promise.race([
 							chrome.tabs.sendMessage(tab.id, { type: 'GET_FRESH_DETECTION' }),

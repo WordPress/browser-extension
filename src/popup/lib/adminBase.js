@@ -47,15 +47,16 @@ export function reconcileProbeBase(currentBaseUrl, currentEvidence, origin, path
  * Is the probed document the tab the popup captured? The probe runs after
  * async work, so the tab can have navigated since its URL was captured — in
  * which case the probe's DOM facts describe a different document and must be
- * discarded (#103 review). Same origin and pathname is a match; query and
- * hash may differ (wp-admin navigates list tables by query string within one
- * document path). Unparsable input never matches.
+ * discarded (#103 review). Origin, pathname, AND query must all match: a
+ * query change loads a different document in wp-admin (post.php?post=1 and
+ * post.php?post=2 are different edit screens). Only the fragment is ignored.
+ * Unparsable input never matches.
  */
 export function probeMatchesTab(probeHref, tabUrl) {
 	try {
 		const p = new URL(probeHref);
 		const t = new URL(tabUrl);
-		return p.origin === t.origin && p.pathname === t.pathname;
+		return p.origin === t.origin && p.pathname === t.pathname && p.search === t.search;
 	} catch (_) {
 		return false;
 	}

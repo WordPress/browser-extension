@@ -911,6 +911,21 @@ async function main() {
       derive('https://example.com', 'https://example.com/wp-json/')
         === 'https://example.com',
       'root install: /wp-json/ → bare origin');
+    // rest_url() prints the trailing slash, but filters and hand-written
+    // hardening links can omit it. A terminal, segment-exact /wp-json is the
+    // API root either way — never part of the install base.
+    assert(
+      derive('https://example.com', 'https://example.com/wp-json')
+        === 'https://example.com',
+      'slashless root: /wp-json → bare origin, not a /wp-json base');
+    assert(
+      derive('https://example.com', 'https://example.com/wordpress/wp-json')
+        === 'https://example.com/wordpress',
+      'slashless subdirectory: /wordpress/wp-json → /wordpress base');
+    assert(
+      derive('https://example.com', 'https://example.com/not-wp-json')
+        === 'https://example.com/not-wp-json',
+      'a segment merely ending in wp-json is not the API root');
     assert(
       derive('https://example.com', 'https://example.com/?rest_route=/')
         === 'https://example.com',

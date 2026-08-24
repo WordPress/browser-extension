@@ -545,8 +545,8 @@ async function main() {
       // Frontend → backend as one pipeline: the popup's #88 cache-only
       // fallback (orphaned content script, no live baseUrl) recovers the base
       // with the real adminBaseFromProbe, and the resulting payload has to
-      // clear the real gate. The React hook's own assignments are the only
-      // link not driven here — the repo has no React harness.
+      // clear the real gate. The hook orchestration itself is driven by
+      // actions.mjs [46].
       const adminBaseFromProbe = loadAdminBaseFromProbe();
       const resolveFromProbe = async (send, tabPath, bodyAdmin) => {
         const derived = adminBaseFromProbe(HOST, tabPath, bodyAdmin);
@@ -603,11 +603,6 @@ async function main() {
         { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
       // A same-origin REST root that derives a subdirectory base.
       await detectB('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/siteA/wp-json/` });
-      // A slashless /wp-json reads as a subdirectory base in deriveBase, so it
-      // no longer confirms the root either — the gate mirrors the derivation
-      // exactly rather than being more lenient than it (WP itself always
-      // prints the discovery href with the trailing slash).
-      await detectB('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/wp-json` });
       // Non-string and forged evidence values fail closed.
       await detectB('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 123 });
       await detectB('/wp-admin/index.php',
@@ -687,6 +682,45 @@ async function main() {
       assert(storeBL2[HOST]?.customName === 'Mine' && storeBL2[HOST].lastLoggedInAt > 5
         && Object.keys(storeBL2).length === 2,
         'popup-path root evidence bumps the pinned origin record in place');
+    }
+    {
+      // Slashless REST discovery roots, real pipeline: detectWordPress output
+      // feeds the gate unmodified — no hand-built context. rest_url() prints
+      // the trailing slash, but filters and hand-written links can omit it,
+      // and a terminal segment-exact /wp-json is the API root either way,
+      // never part of the install base. The slashless root used to derive
+      // <origin>/wp-json as a base and mint a bogus /wp-json row.
+      const { JSDOM } = require('jsdom');
+      const pipeDetect = {};
+      new Function('globalThis', read('lib', 'detect.js'))(pipeDetect);
+      const pipeline = async (href) => {
+        const storage = makeStorage({});
+        const { send } = loadBackground(storage);
+        const dom = new JSDOM('<html><head>'
+          + `<link rel="https://api.w.org/" href="${href}">`
+          + '</head><body class="home logged-in admin-bar">'
+          + '<div id="wpadminbar"></div></body></html>');
+        const detection = pipeDetect.WPDetect.detectWordPress(dom.window.document, {
+          origin: HOST, pathname: '/',
+        });
+        await send({ type: 'WP_DETECTION', detection, hostFromDOM: 'selfhosted' },
+          { url: `${HOST}/`, origin: HOST, tab: { id: 7, url: `${HOST}/` } });
+        await settle();
+        return storage.read(MY_SITES_KEY) || {};
+      };
+
+      const rootSlashed = await pipeline(`${HOST}/wp-json/`);
+      assert(!!rootSlashed[HOST] && Object.keys(rootSlashed).length === 1,
+        'pipeline: root /wp-json/ records the origin');
+      const rootBare = await pipeline(`${HOST}/wp-json`);
+      assert(!!rootBare[HOST] && Object.keys(rootBare).length === 1,
+        'pipeline: slashless /wp-json records the origin, not a /wp-json row');
+      const subSlashed = await pipeline(`${SA}/wp-json/`);
+      assert(!!subSlashed[SA] && Object.keys(subSlashed).length === 1,
+        'pipeline: subdirectory /siteA/wp-json/ records the /siteA install');
+      const subBare = await pipeline(`${SA}/wp-json`);
+      assert(!!subBare[SA] && Object.keys(subBare).length === 1,
+        'pipeline: slashless /siteA/wp-json records /siteA, not a /siteA/wp-json row');
     }
     {
       // v1.0.1 ambiguity, end to end: a subdirectory install seen only via

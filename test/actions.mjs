@@ -283,10 +283,9 @@ console.log('\n[44] cache-only fallback recovers the admin base from the tab pat
 	// already-open subdirectory wp-admin tab, messaging dead, cached
 	// detection present, probe confirming the admin document): covers
 	// adminBaseFromProbe's derivation contract with the REAL lib/detect.js
-	// and the recovered base flowing into real target synthesis. The React
-	// hook wiring itself (probe field → merge call in useDetection) is not
-	// driven here — the repo has no React harness; that remains build- and
-	// review-verified. True pipeline coverage is a possible follow-up.
+	// and the recovered base flowing into real target synthesis. The hook
+	// orchestration around it (probe → guard → merge → push) is driven by
+	// [46] below.
 	const detectSrc = readFileSync(join(__dirname, '..', 'lib', 'detect.js'), 'utf8');
 	const libCtx = {};
 	new Function('globalThis', detectSrc)(libCtx);
@@ -358,8 +357,7 @@ console.log('\n[45] probe reconciliation and navigation guard (#103 review harde
 {
 	// Helper-seam coverage like [44]: reconcileProbeBase and probeMatchesTab
 	// with the REAL lib/detect.js, and the extracted page probe against a real
-	// DOM. The hook wiring (probe → guard → merge in useDetection) is not
-	// driven here — the repo has no React harness; build- and review-verified.
+	// DOM. The hook orchestration that wires them together is driven by [46].
 	const detectSrc = readFileSync(join(__dirname, '..', 'lib', 'detect.js'), 'utf8');
 	const libCtx = {};
 	new Function('globalThis', detectSrc)(libCtx);
@@ -404,12 +402,15 @@ console.log('\n[45] probe reconciliation and navigation guard (#103 review harde
 		'an unconfirmed probe still contributes nothing');
 
 	// Navigation guard: the probe's document must be the tab the popup
-	// captured — same origin and pathname; query and hash may differ (wp-admin
-	// list tables navigate by query string within one document path).
+	// captured — same origin, pathname, AND query. Only the fragment is
+	// ignored: a query change loads a different document in wp-admin
+	// (post.php?post=1 and post.php?post=2 are different edit screens).
 	assert(probeMatchesTab(`${O}/wp-admin/edit.php`, `${O}/wp-admin/edit.php`) === true,
 		'identical document and tab URLs match');
-	assert(probeMatchesTab(`${O}/wp-admin/edit.php?paged=2#top`, `${O}/wp-admin/edit.php?post_type=page`) === true,
-		'query and hash differences still match');
+	assert(probeMatchesTab(`${O}/wp-admin/post.php?post=1&action=edit#slug`, `${O}/wp-admin/post.php?post=1&action=edit`) === true,
+		'a fragment difference is the same document');
+	assert(probeMatchesTab(`${O}/wp-admin/post.php?post=2&action=edit`, `${O}/wp-admin/post.php?post=1&action=edit`) === false,
+		'a query change is a different document');
 	assert(probeMatchesTab(`${O}/siteB/wp-admin/`, `${O}/siteA/wp-admin/`) === false,
 		'a different pathname is a navigated tab');
 	assert(probeMatchesTab(`https://other.example/wp-admin/`, `${O}/wp-admin/`) === false,
@@ -450,6 +451,121 @@ console.log('\n[45] probe reconciliation and navigation guard (#103 review harde
 		'the no-admin-bar branch reports the document URL too');
 	assert(spoofState.bodyAdmin === false,
 		'body.wp-admin without #wpwrap is not an admin document');
+}
+
+console.log('\n[46] useDetection orchestration: probe confirmation gates the pushes');
+{
+	// Drives the REAL hook: imports stripped, react and chrome stubbed, the
+	// probe function executed against a real DOM — then asserts the decision
+	// that matters at this seam: does the popup push a resolution, and does
+	// it attempt the credentialed fresh fetch? Fail closed everywhere: only
+	// a probe that ran AND reported the captured tab's own document may feed
+	// a push; a missing, failed, or navigated probe pushes nothing.
+	const hookSrc = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'hooks', 'useDetection.js'),
+		'utf8',
+	).replace(/^import .*$/gm, '').replace(/^export /gm, '');
+	const detectSrc46 = readFileSync(join(__dirname, '..', 'lib', 'detect.js'), 'utf8');
+	const libCtx46 = {};
+	new Function('globalThis', detectSrc46)(libCtx46);
+	const adminBaseSrc46 = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'adminBase.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+	const helpers46 = new Function(
+		'window',
+		`${adminBaseSrc46}\nreturn { reconcileProbeBase, probeMatchesTab };`,
+	)({ WPDetect: libCtx46.WPDetect });
+	const probeSrc46 = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'pageProbe.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+
+	const TAB = 'https://www.example.com/wp-admin/post.php?post=1&action=edit';
+
+	const run = async ({ docUrl, probeThrows = false }) => {
+		const dom = new JSDOM(
+			'<html><body class="wp-admin wp-core-ui"><div id="wpwrap">'
+			+ '<div id="wpadminbar"></div></div></body></html>',
+			{ url: docUrl },
+		);
+		const probePageState = new Function(
+			'document', 'location', `${probeSrc46}\nreturn probePageState;`,
+		)(dom.window.document, dom.window.location);
+		const tabMsgs = [];
+		const pushes = [];
+		const chrome = {
+			tabs: {
+				query: async () => [{ id: 7, url: TAB }],
+				sendMessage: async (id, msg) => { tabMsgs.push(msg.type); return null; },
+			},
+			runtime: {
+				sendMessage: async (msg) => {
+					if (msg.type === 'GET_CACHED_DETECTION') {
+						return { isWordPress: true, confidence: 50, signals: ['wp-asset-path'], host: null };
+					}
+					pushes.push(msg);
+				},
+			},
+			scripting: {
+				executeScript: async ({ func }) => {
+					if (probeThrows) throw new Error('injection unavailable');
+					// Execute the serialized probe in the jsdom document, the
+					// way the browser would in the page.
+					const res = await new Function(
+						'document', 'location', `return (${func})();`,
+					)(dom.window.document, dom.window.location);
+					return [{ result: res }];
+				},
+			},
+			cookies: { getAll: async () => [{ name: 'wordpress_logged_in_abc' }] },
+		};
+		const states = [];
+		const useState = (init) => [init, (s) => states.push(s)];
+		const useEffect = (fn) => { fn(); };
+		const useDetection = new Function(
+			'chrome', 'useState', 'useEffect',
+			'reconcileProbeBase', 'probeMatchesTab', 'probePageState', 'console',
+			`${hookSrc}\nreturn useDetection;`,
+		)(
+			chrome, useState, useEffect,
+			helpers46.reconcileProbeBase, helpers46.probeMatchesTab, probePageState,
+			{ error: () => {} },
+		);
+		useDetection();
+		for (let i = 0; i < 30 && !states.length; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 10));
+		}
+		await new Promise((resolve) => setTimeout(resolve, 30));
+		return { tabMsgs, pushes, states };
+	};
+
+	// Confirmed probe: the resolution is pushed, carrying the base and
+	// evidence the probe recovered from the tab's own admin document
+	// (the #88 cache-synthesized context has neither on its own).
+	const ok = await run({ docUrl: TAB });
+	assert(ok.pushes.length >= 1 && ok.pushes[0].type === 'POPUP_DETECTION_RESOLVED',
+		'a confirmed probe pushes the resolution');
+	assert(ok.pushes[0].baseUrl === 'https://www.example.com'
+		&& ok.pushes[0].baseUrlEvidence === 'admin-path',
+		'the push carries the probe-recovered base and its evidence');
+
+	// Navigated probe — the query differs, which in wp-admin is a different
+	// document (another post's edit screen): nothing may be pushed, and the
+	// credentialed fresh fetch must not run either.
+	const nav = await run({ docUrl: 'https://www.example.com/wp-admin/post.php?post=2&action=edit' });
+	assert(nav.pushes.length === 0, 'a navigated tab pushes no resolution');
+	assert(!nav.tabMsgs.includes('GET_FRESH_DETECTION'),
+		'a navigated tab skips the credentialed fresh fetch');
+
+	// Missing/failed probe: without positive confirmation that the document
+	// matches the captured tab, fail closed the same way.
+	const broken = await run({ docUrl: TAB, probeThrows: true });
+	assert(broken.pushes.length === 0, 'a failed probe pushes no resolution');
+	assert(!broken.tabMsgs.includes('GET_FRESH_DETECTION'),
+		'a failed probe skips the credentialed fresh fetch');
+	assert(broken.states.some((s) => s.status === 'detected'),
+		'the popup still renders from captured data when the probe fails');
 }
 
 console.log(`\n${failures === 0 ? 'Popup action tests passed.' : failures + ' failure(s).'}`);
