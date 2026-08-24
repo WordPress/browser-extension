@@ -150,12 +150,18 @@
       || (doc.defaultView && doc.defaultView.location && doc.defaultView.location.pathname)
       || null;
     // The pathname fallback applies only to documents that are positively
-    // admin screens. admin_body_class prints `wp-admin` on every core admin
-    // page and never on the front end, so a public permalink that merely
-    // contains /wp-admin/ in its slug path (e.g. /guides/wp-admin/security/)
-    // keeps the bare-origin base when no REST link is present.
+    // admin screens: body.wp-admin AND #wpwrap, both printed by
+    // wp-admin/admin-header.php on every core admin screen (network and user
+    // admin included; the customizer and wp-login.php print neither). The
+    // body class alone is too easy for a theme to emit on a front-end page,
+    // so a public permalink that merely contains /wp-admin/ in its slug path
+    // (e.g. /guides/wp-admin/security/) keeps the bare-origin base when no
+    // REST link is present. A practical correctness gate, not a security
+    // boundary — the background re-derives the base from the
+    // browser-attested path before trusting any claim built on this.
     const isAdminDoc = !!(doc.body && doc.body.classList
-      && doc.body.classList.contains('wp-admin'));
+      && doc.body.classList.contains('wp-admin')
+      && doc.getElementById('wpwrap'));
     if (docOrigin && docOrigin !== 'null') {
       const derived = deriveBase(
         docOrigin, result.context.restApiRoot, isAdminDoc ? docPathname : null,

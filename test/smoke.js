@@ -1209,12 +1209,15 @@ async function main() {
     const ORIGIN = 'https://www.example.com';
     // Admin screens never emit the REST discovery link; the pathname prefix
     // before the final boundary-delimited /wp-admin segment is the base.
-    // The fallback is gated on body.wp-admin, which admin_body_class prints
-    // on every core admin screen and never on the front end.
+    // The fallback is gated on body.wp-admin AND #wpwrap, both printed by
+    // wp-admin/admin-header.php on every core admin screen and never on the
+    // front end.
     const adminDom = new JSDOM(`
       <html><head></head><body class="wp-admin wp-core-ui">
-        <div id="wpadminbar">
-          <li id="wp-admin-bar-view-site"><a href="https://www.example.com/en-us/research/">Visit Site</a></li>
+        <div id="wpwrap">
+          <div id="wpadminbar">
+            <li id="wp-admin-bar-view-site"><a href="https://www.example.com/en-us/research/">Visit Site</a></li>
+          </div>
         </div>
       </body></html>
     `);
@@ -1514,7 +1517,7 @@ async function main() {
     const adminDom = new JSDOM(
       '<html><head><link rel="canonical" href="x"></head>'
       + '<body class="wp-admin wp-core-ui index-php">'
-      + '<div id="wpadminbar"></div></body></html>',
+      + '<div id="wpwrap"><div id="wpadminbar"></div></div></body></html>',
     );
     const adminCtx = loadModules(adminDom);
     const adminDet = adminCtx.WPDetect.detectWordPress(adminCtx.document, {
@@ -1526,6 +1529,25 @@ async function main() {
       'and carries no REST root — which is what made #103 invisible to the old gate');
     assert(adminDet.context.baseUrl === ORIGIN && adminDet.context.baseUrlEvidence === 'admin-path',
       "a root install's admin screen reports admin-path evidence (the #103 case)");
+
+    // An admin document is body.wp-admin AND #wpwrap — both printed by
+    // wp-admin/admin-header.php on every core admin screen (Dashboard,
+    // editor, profile, network and user admin all include it). A front-end
+    // page that merely carries a `wp-admin` body class (themes and plugins
+    // can add one) is not an admin document, so its pathname derives nothing
+    // and no admin-path evidence is claimed. A practical correctness gate,
+    // not a security boundary — the background independently re-derives the
+    // base from the browser-attested path before trusting any claim.
+    const spoofDom = new JSDOM(
+      '<html><head><meta name="generator" content="WordPress 6.8"></head>'
+      + '<body class="wp-admin logged-in"><div id="wpadminbar"></div></body></html>',
+    );
+    const spoofCtx = loadModules(spoofDom);
+    const spoofDet = spoofCtx.WPDetect.detectWordPress(spoofCtx.document, {
+      origin: ORIGIN, pathname: '/press/wp-admin/tour/',
+    });
+    assert(spoofDet.context.baseUrl === ORIGIN && spoofDet.context.baseUrlEvidence === null,
+      'body.wp-admin without #wpwrap is not an admin document — no derivation, no evidence');
 
     // The same page shape on the front end, REST link stripped: identical
     // baseUrl, no evidence.

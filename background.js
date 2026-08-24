@@ -19,6 +19,12 @@ importScripts('lib/my-sites.js');
 // admin-URL priority chain and its same-origin guard.
 importScripts('lib/rest.js');
 
+// Detection helpers (globalThis.WPDetect). The My Sites gate re-derives
+// install bases with deriveBase rather than keeping a second copy of the
+// admin-pathname and REST-root rules (see evidenceBackedBase). detect.js is
+// browser-API-free by design, so it loads in the worker as-is.
+importScripts('lib/detect.js');
+
 // Detection results are cached one storage key per origin (wp_cache_<origin>)
 // rather than a single blob, so a page load reads and writes only its own
 // origin's entry instead of the whole browsing history, and concurrent writes
@@ -108,31 +114,38 @@ function enqueueStorageWrite(mutate) {
 // subdirectory PATH only ever comes from real evidence; any root-equivalent
 // value (the bare origin, or slash/query/fragment variants of it — decided on
 // the CANONICALIZED candidate, not string equality) needs the page to CONFIRM
-// the install is at the root, which either derivation can do:
+// the install is at the root.
 //
-//   - `evidence: 'admin-path'` — WordPress serves wp-admin at <install
+// Confirmation is never taken from the message's word for it. The claimed
+// `evidence` and the values it rides on reach us through page DOM, so the
+// gate RE-DERIVES the base with lib/detect.js's deriveBase — the single
+// source of truth for both rules — from inputs it can actually trust, and
+// requires the result to MATCH the claim:
+//
+//   - `evidence: 'admin-path'`: re-derived from `pathname`, the
+//     browser-attested sender path. WordPress serves wp-admin at <install
 //     base>/wp-admin/, so an admin document at <origin>/wp-admin/… fixes the
-//     base at the origin definitionally, as strongly as the REST link does.
-//     Only the VALUE is ambiguous with the fallback; `evidence` settles it.
-//     Without this a root install browsed solely through wp-admin — how
-//     people work on sites they manage — never entered My Sites at all
-//     (#103), since admin_head prints no REST discovery link.
-//   - a same-origin http(s) `restApiRoot`. Re-derived here rather than read
-//     off `evidence`, because a content script orphaned by the update to this
-//     build still reports the pre-#103 context shape (no evidence field) and
-//     must keep recording until its tab navigates.
+//     base at the origin definitionally, as strongly as the REST link does
+//     (#103: without this route, a root install browsed solely through
+//     wp-admin never entered My Sites — admin_head prints no REST discovery
+//     link). The match requirement is what keeps it honest: a path under
+//     /siteA/wp-admin/ derives /siteA, never the origin, so a subdirectory
+//     install cannot claim the root however its DOM is dressed.
+//   - the REST route: re-derived from `restApiRoot` itself, which must
+//     derive a root-equivalent base — /wp-json/ at the root or a plain
+//     /?rest_route=/. A same-origin REST root living under /siteA/wp-json/
+//     derives /siteA and confirms nothing about the root. Re-deriving here
+//     also keeps recording alive for content scripts orphaned by the update
+//     to this build: they still send the pre-#103 context shape (no evidence
+//     field) from front-end pages, where the REST link is the evidence. On
+//     admin pages an orphaned script has nothing to offer until its tab
+//     navigates or the popup opens (the popup reconciles that shape itself —
+//     see reconcileProbeBase in the popup source).
 //
-// `evidence` reaches us through page DOM, so an admin-path claim is
-// cross-checked against `pathname` from the browser-attested sender URL: that
-// path must contain a wp-admin segment. A necessary condition, not a
-// re-derivation — deriveBase stays the single source of truth for the base.
-// It rules out the case that matters in practice: a subdirectory install
-// whose front-end page carries a `wp-admin` body class (themes and plugins
-// can add one) claiming the root as its base.
-//
-// Both URLs must be http(s): schemes like blob: can parse to a same-origin
-// `origin` while being nothing of the sort. Everything returned here is
-// re-sanitized at the storage boundary.
+// deriveBase enforces http(s) and same-origin internally: schemes like blob:
+// can parse to a same-origin `origin` while being nothing of the sort, and
+// they come back evidence-less. Everything returned here is re-sanitized at
+// the storage boundary.
 function evidenceBackedBase(origin, baseUrl, restApiRoot, evidence, pathname) {
   if (!baseUrl || typeof baseUrl !== 'string') return null;
   let canonical;
@@ -145,25 +158,17 @@ function evidenceBackedBase(origin, baseUrl, restApiRoot, evidence, pathname) {
     return null;
   }
   if (canonical !== origin) return baseUrl; // real subdirectory path
-  if (evidence === 'admin-path' && isAdminPathname(pathname)) return origin;
-  if (!restApiRoot || typeof restApiRoot !== 'string') return null;
-  try {
-    const r = new URL(restApiRoot, origin);
-    if (r.protocol !== 'http:' && r.protocol !== 'https:') return null;
-    return r.origin === origin ? origin : null;
-  } catch (_) {
-    return null;
+  if (evidence === 'admin-path' && typeof pathname === 'string') {
+    const viaAdmin = WPDetect.deriveBase(origin, null, pathname);
+    if (viaAdmin.evidence === 'admin-path' && viaAdmin.baseUrl === origin) return origin;
+    // An admin claim the attested path can't reproduce gets no shortcut —
+    // but the REST route below may still confirm the root on its own terms.
   }
-}
-
-// Does a browser-attested pathname contain a segment-exact `wp-admin`? Segment
-// split rather than substring so /guides/wp-administration/ doesn't qualify,
-// and encoded slashes fail closed the way lib/detect.js's own path handling
-// does — one path must never read as two.
-function isAdminPathname(pathname) {
-  if (typeof pathname !== 'string' || pathname.charAt(0) !== '/') return false;
-  if (/%2f/i.test(pathname)) return false;
-  return pathname.split('/').includes('wp-admin');
+  if (restApiRoot && typeof restApiRoot === 'string') {
+    const viaRest = WPDetect.deriveBase(origin, restApiRoot, null);
+    if (viaRest.evidence === 'rest' && viaRest.baseUrl === origin) return origin;
+  }
+  return null;
 }
 
 // Record a logged-in WordPress site, applying the curation rule in

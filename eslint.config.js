@@ -54,6 +54,7 @@ module.exports = [
 				importScripts: 'readonly',
 				WPMySites: 'readonly',
 				WPRest: 'readonly',
+				WPDetect: 'readonly',
 			},
 		},
 	},

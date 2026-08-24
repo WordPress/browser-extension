@@ -17,6 +17,7 @@
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
+import { JSDOM } from 'jsdom';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const actionsSrc = readFileSync(
@@ -351,6 +352,104 @@ console.log('\n[44] cache-only fallback recovers the admin base from the tab pat
 		'Profile target from the recovered base retains /en-us/research');
 	assert(await run('login', args) === `${O}/en-us/research/wp-login.php`,
 		'Log In target from the recovered base retains /en-us/research');
+}
+
+console.log('\n[45] probe reconciliation and navigation guard (#103 review hardening)');
+{
+	// Helper-seam coverage like [44]: reconcileProbeBase and probeMatchesTab
+	// with the REAL lib/detect.js, and the extracted page probe against a real
+	// DOM. The hook wiring (probe → guard → merge in useDetection) is not
+	// driven here — the repo has no React harness; build- and review-verified.
+	const detectSrc = readFileSync(join(__dirname, '..', 'lib', 'detect.js'), 'utf8');
+	const libCtx = {};
+	new Function('globalThis', detectSrc)(libCtx);
+	const adminBaseSrc = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'adminBase.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+	const { reconcileProbeBase, probeMatchesTab } = new Function(
+		'window',
+		`${adminBaseSrc}\nreturn { reconcileProbeBase, probeMatchesTab };`,
+	)({ WPDetect: libCtx.WPDetect });
+
+	const O = 'https://www.example.com';
+
+	// #88 cache-synthesized context: no base at all — adopt the derivation.
+	let patch = reconcileProbeBase(null, undefined, O, '/wp-admin/index.php', true);
+	assert(patch && patch.baseUrl === O && patch.evidence === 'admin-path',
+		'a base-less context adopts the derived base and its evidence');
+
+	// The 1.0.2 compat gap: an orphaned old content script reports the
+	// bare-origin FALLBACK value with no evidence field at all. On an admin
+	// tab the derivation agrees, so the evidence upgrades in place.
+	patch = reconcileProbeBase(O, undefined, O, '/wp-admin/index.php', true);
+	assert(patch && patch.baseUrl === O && patch.evidence === 'admin-path',
+		'an old-shape bare-origin context gains admin-path evidence when the derivation agrees');
+	patch = reconcileProbeBase(`${O}/siteA`, undefined, O, '/siteA/wp-admin/edit.php', true);
+	assert(patch && patch.baseUrl === `${O}/siteA` && patch.evidence === 'admin-path',
+		'an old-shape subdirectory base upgrades when the admin tab derives the same base');
+	patch = reconcileProbeBase(`${O}/siteA/`, undefined, O, '/siteA/wp-admin/edit.php', true);
+	assert(patch && patch.evidence === 'admin-path',
+		'agreement is decided on canonical form — a trailing slash does not block the upgrade');
+
+	// Never replace a base the derivation disagrees with, and never touch an
+	// evidenced one.
+	assert(reconcileProbeBase(`${O}/siteA`, undefined, O, '/wp-admin/index.php', true) === null,
+		'a disagreeing derivation leaves the stored base untouched and unevidenced');
+	assert(reconcileProbeBase(O, 'rest', O, '/wp-admin/index.php', true) === null,
+		'an already-evidenced context is never rewritten');
+	assert(reconcileProbeBase(`${O}/siteA`, undefined, O, '/siteA/hello-world/', true) === null,
+		'a non-admin pathname derives nothing to reconcile');
+	assert(reconcileProbeBase(null, undefined, O, '/wp-admin/index.php', false) === null,
+		'an unconfirmed probe still contributes nothing');
+
+	// Navigation guard: the probe's document must be the tab the popup
+	// captured — same origin and pathname; query and hash may differ (wp-admin
+	// list tables navigate by query string within one document path).
+	assert(probeMatchesTab(`${O}/wp-admin/edit.php`, `${O}/wp-admin/edit.php`) === true,
+		'identical document and tab URLs match');
+	assert(probeMatchesTab(`${O}/wp-admin/edit.php?paged=2#top`, `${O}/wp-admin/edit.php?post_type=page`) === true,
+		'query and hash differences still match');
+	assert(probeMatchesTab(`${O}/siteB/wp-admin/`, `${O}/siteA/wp-admin/`) === false,
+		'a different pathname is a navigated tab');
+	assert(probeMatchesTab(`https://other.example/wp-admin/`, `${O}/wp-admin/`) === false,
+		'a different origin is a navigated tab');
+	assert(probeMatchesTab(null, `${O}/wp-admin/`) === false
+		&& probeMatchesTab('not a url', `${O}/wp-admin/`) === false,
+		'a missing or unparsable probe URL never matches');
+
+	// The extracted page probe itself: reports its own document URL, and only
+	// calls a document an admin screen when body.wp-admin AND #wpwrap are both
+	// present (both printed by wp-admin/admin-header.php on every core admin
+	// screen; a body class alone is spoofable by any theme).
+	const probeSrc = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'pageProbe.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+	const loadProbe = (dom) => new Function(
+		'document', 'location', `${probeSrc}\nreturn probePageState;`,
+	)(dom.window.document, dom.window.location);
+
+	const adminDom = new JSDOM(
+		'<html><body class="wp-admin wp-core-ui"><div id="wpwrap">'
+		+ '<div id="wpadminbar"></div></div></body></html>',
+		{ url: `${O}/wp-admin/index.php` },
+	);
+	const adminState = await loadProbe(adminDom)();
+	assert(adminState.href === `${O}/wp-admin/index.php`,
+		'the probe reports its own document URL');
+	assert(adminState.bodyAdmin === true, 'body.wp-admin plus #wpwrap is an admin document');
+	assert(adminState.hasAdminBar === true, 'the admin bar is seen inside #wpwrap');
+
+	const spoofDom = new JSDOM(
+		'<html><body class="wp-admin logged-in"><p>front end</p></body></html>',
+		{ url: `${O}/press/wp-admin/tour/` },
+	);
+	const spoofState = await loadProbe(spoofDom)();
+	assert(spoofState.href === `${O}/press/wp-admin/tour/`,
+		'the no-admin-bar branch reports the document URL too');
+	assert(spoofState.bodyAdmin === false,
+		'body.wp-admin without #wpwrap is not an admin document');
 }
 
 console.log(`\n${failures === 0 ? 'Popup action tests passed.' : failures + ' failure(s).'}`);

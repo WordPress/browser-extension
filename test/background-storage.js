@@ -84,6 +84,7 @@ function loadBackground(storage) {
   const libCtx = {};
   new Function('globalThis', mySitesSrc)(libCtx);
   new Function('globalThis', 'document', 'window', restSrc)(libCtx, undefined, undefined);
+  new Function('globalThis', read('lib', 'detect.js'))(libCtx);
 
   const listeners = { message: [] };
   const iconCalls = [];
@@ -142,8 +143,8 @@ function loadBackground(storage) {
     },
   };
 
-  new Function('globalThis', 'chrome', 'importScripts', 'WPMySites', 'WPRest', backgroundSrc)(
-    {}, chromeStub, () => {}, libCtx.WPMySites, libCtx.WPRest,
+  new Function('globalThis', 'chrome', 'importScripts', 'WPMySites', 'WPRest', 'WPDetect', backgroundSrc)(
+    {}, chromeStub, () => {}, libCtx.WPMySites, libCtx.WPRest, libCtx.WPDetect,
   );
 
   assert(listeners.message.length === 1, 'background registered one onMessage listener');
@@ -580,6 +581,112 @@ async function main() {
       await settle();
       assert(Object.keys(storage9.read(MY_SITES_KEY) || {}).length === 0,
         'popup fallback → gate: unconfirmed and fail-closed probes mint nothing');
+    }
+    {
+      // Root confirmation is BOUND to what the trustworthy inputs actually
+      // derive: the gate re-derives the expected base from the browser-attested
+      // pathname (admin evidence) or from the REST root itself (rest evidence)
+      // with lib/detect.js's deriveBase, and the claim must MATCH. An admin
+      // path under /siteA derives /siteA, so it can never confirm a bare-origin
+      // claim; neither can a REST root living under /siteA/wp-json/.
+      const mkDetect = (send) => (path, ctx) => send({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 90, signals: ['admin-bar-element'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+
+      const storageB = makeStorage({});
+      const { send: sendB } = loadBackground(storageB);
+      const detectB = mkDetect(sendB);
+      // Admin evidence whose attested path derives a SUBDIRECTORY base.
+      await detectB('/siteA/wp-admin/edit.php',
+        { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      // A same-origin REST root that derives a subdirectory base.
+      await detectB('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/siteA/wp-json/` });
+      // A slashless /wp-json reads as a subdirectory base in deriveBase, so it
+      // no longer confirms the root either — the gate mirrors the derivation
+      // exactly rather than being more lenient than it (WP itself always
+      // prints the discovery href with the trailing slash).
+      await detectB('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/wp-json` });
+      // Non-string and forged evidence values fail closed.
+      await detectB('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 123 });
+      await detectB('/wp-admin/index.php',
+        { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: { toString: () => 'admin-path' } });
+      await settle();
+      assert(Object.keys(storageB.read(MY_SITES_KEY) || {}).length === 0,
+        'a bare-origin claim is confirmed only by a derivation that matches it');
+
+      // The same mismatched claims through the popup resolution path.
+      const storageBP = makeStorage({});
+      const { send: sendBP } = loadBackground(storageBP);
+      await sendBP({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/siteA/wp-admin/edit.php',
+      }, POPUP_SENDER);
+      await sendBP({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, restApiRoot: `${HOST}/siteA/wp-json/`, pathname: '/',
+      }, POPUP_SENDER);
+      await settle();
+      assert(Object.keys(storageBP.read(MY_SITES_KEY) || {}).length === 0,
+        'the popup path applies the same match requirement');
+
+      // The REST shapes WordPress really prints for a root install still
+      // confirm it: pretty permalinks (/wp-json/) and plain (/?rest_route=/).
+      const storageBR = makeStorage({});
+      const { send: sendBR } = loadBackground(storageBR);
+      const detectBR = mkDetect(sendBR);
+      await detectBR('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/wp-json/` });
+      await settle();
+      assert(!!storageBR.read(MY_SITES_KEY)?.[HOST], 'a root /wp-json/ REST root still confirms');
+      const storageBR2 = makeStorage({});
+      const { send: sendBR2 } = loadBackground(storageBR2);
+      await mkDetect(sendBR2)('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/?rest_route=/` });
+      await settle();
+      assert(!!storageBR2.read(MY_SITES_KEY)?.[HOST], 'a plain-permalink REST root still confirms');
+
+      // Sticky removal holds through the popup resolution path too.
+      const storageBS = makeStorage({});
+      const { send: sendBS } = loadBackground(storageBS);
+      const popupAdmin = () => sendBS({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/wp-admin/index.php',
+      }, POPUP_SENDER);
+      await popupAdmin();
+      await sendBS({ type: 'MUTATE_MY_SITES', op: 'remove', key: HOST }, POPUP_SENDER);
+      await settle();
+      await popupAdmin();
+      await settle();
+      const afterBS = storageBS.read(MY_SITES_KEY);
+      assert(afterBS[HOST]?.dismissed === true && Object.keys(afterBS).length === 1,
+        'sticky removal holds through the popup resolution path');
+
+      // v1.0.1 pinning through the popup path: the ambiguous legacy origin
+      // record stays pinned with its curation; sibling admin evidence records
+      // separately; root admin evidence bumps the pinned record in place.
+      const legacyPin = {
+        [HOST]: { origin: HOST, baseUrl: HOST, addedAt: 1, lastLoggedInAt: 5, customName: 'Mine' },
+      };
+      const storageBL = makeStorage({ [MY_SITES_KEY]: structuredClone(legacyPin) });
+      const { send: sendBL } = loadBackground(storageBL);
+      await sendBL({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: SA, baseUrlEvidence: 'admin-path', pathname: '/siteA/wp-admin/edit.php',
+      }, POPUP_SENDER);
+      await settle();
+      const storeBL = storageBL.read(MY_SITES_KEY);
+      assert(storeBL[HOST]?.customName === 'Mine' && !!storeBL[SA]
+        && Object.keys(storeBL).length === 2,
+        'popup-path sibling evidence records separately; the pinned record keeps its curation');
+      await sendBL({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/wp-admin/index.php',
+      }, POPUP_SENDER);
+      await settle();
+      const storeBL2 = storageBL.read(MY_SITES_KEY);
+      assert(storeBL2[HOST]?.customName === 'Mine' && storeBL2[HOST].lastLoggedInAt > 5
+        && Object.keys(storeBL2).length === 2,
+        'popup-path root evidence bumps the pinned origin record in place');
     }
     {
       // v1.0.1 ambiguity, end to end: a subdirectory install seen only via
