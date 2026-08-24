@@ -721,6 +721,32 @@ async function main() {
       const subBare = await pipeline(`${SA}/wp-json`);
       assert(!!subBare[SA] && Object.keys(subBare).length === 1,
         'pipeline: slashless /siteA/wp-json records /siteA, not a /siteA/wp-json row');
+
+      // Encoded API-root forms: RFC 3986 unreserved encoding must not
+      // smuggle a /wp-json base past the gate. The store canonicalizes
+      // %77p-json to wp-json at its boundary, so the derivation has to see
+      // the decoded form too. None of these may create a stored base ending
+      // in /wp-json.
+      for (const enc of ['/%77p-json', '/%77p-json/', '/wp-%6Ason', '/%77%70-%6Ason/']) {
+        const store = await pipeline(HOST + enc);
+        const keys = Object.keys(store);
+        assert(!!store[HOST] && keys.length === 1,
+          `pipeline: encoded root ${enc} records the origin`);
+        assert(keys.every((k) => !k.endsWith('/wp-json')),
+          `pipeline: encoded root ${enc} mints no /wp-json-suffixed key`);
+      }
+      const encSub = await pipeline(`${HOST}/site%41/wp-json`);
+      assert(!!encSub[SA] && Object.keys(encSub).length === 1,
+        'pipeline: encoded subdirectory /site%41/wp-json records /siteA');
+      const encSlash = await pipeline(`${HOST}/sub%2Fdir/wp-json/`);
+      assert(!!encSlash[`${HOST}/sub%2Fdir`] && Object.keys(encSlash).length === 1,
+        'pipeline: an encoded slash stays one segment in the stored key');
+      // An install genuinely living at /wp-json keeps working — its own
+      // discovery link is /wp-json/wp-json, and its row is legitimate. This
+      // is also why no blind migration deletes old /wp-json rows.
+      const literalWpJson = await pipeline(`${HOST}/wp-json/wp-json`);
+      assert(!!literalWpJson[`${HOST}/wp-json`] && Object.keys(literalWpJson).length === 1,
+        'pipeline: an install literally based at /wp-json still records its own row');
     }
     {
       // v1.0.1 ambiguity, end to end: a subdirectory install seen only via

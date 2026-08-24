@@ -368,6 +368,19 @@
     return null;
   }
 
+  // RFC 3986 §6.2.2: percent-encoded unreserved characters are equivalent
+  // to their decoded form (%77p-json IS wp-json), so decode them — and only
+  // them — before path comparisons. Reserved bytes like %2F stay encoded
+  // (uppercased) so one path never reads as two. Mirrors the storage
+  // boundary's sanitizeBaseUrl in lib/my-sites.js: what this derives is the
+  // key the store will use.
+  function decodeUnreservedPercent(path) {
+    return path.replace(/%([0-9a-fA-F]{2})/g, (m, hex) => {
+      const c = String.fromCharCode(parseInt(hex, 16));
+      return /[A-Za-z0-9\-._~]/.test(c) ? c : `%${hex.toUpperCase()}`;
+    });
+  }
+
   /**
    * Base URL plus WHERE it came from: `{ baseUrl, evidence }`, evidence being
    *   'rest'       — a same-origin REST discovery root fixed it
@@ -418,9 +431,12 @@
       // discovery links can omit the slash, and a terminal segment-exact
       // /wp-json is the API route either way — never part of the install
       // base (without this, a slashless root link would mint a bogus
-      // <origin>/wp-json base). Plain permalinks keep the route in the query
-      // string, so the path already is the base.
-      let path = rootUrl.pathname.replace(/\/+$/, '');
+      // <origin>/wp-json base). Decoded first: %77p-json IS wp-json, and the
+      // storage layer canonicalizes it that way, so an encoded link must not
+      // smuggle the route past this check into a stored /wp-json base. Plain
+      // permalinks keep the route in the query string, so the path already
+      // is the base.
+      let path = decodeUnreservedPercent(rootUrl.pathname).replace(/\/+$/, '');
       if (path.endsWith('/wp-json')) {
         path = path.slice(0, -'/wp-json'.length).replace(/\/+$/, '');
       }

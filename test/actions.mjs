@@ -532,6 +532,10 @@ console.log('\n[46] useDetection orchestration: probe confirmation gates the pus
 			helpers46.reconcileProbeBase, helpers46.probeMatchesTab, probePageState,
 			{ error: () => {} },
 		);
+		// Test harness: the evaluated hook runs against the stubbed
+		// useState/useEffect above, entirely outside React, so the rule's
+		// component-context requirement cannot apply to this call.
+		// eslint-disable-next-line react-hooks/rules-of-hooks
 		useDetection();
 		for (let i = 0; i < 30 && !states.length; i++) {
 			await new Promise((resolve) => setTimeout(resolve, 10));

@@ -927,6 +927,40 @@ async function main() {
         === 'https://example.com/not-wp-json',
       'a segment merely ending in wp-json is not the API root');
     assert(
+      derive('https://example.com', 'https://example.com/wp-jsonish/')
+        === 'https://example.com/wp-jsonish',
+      'a segment merely starting with wp-json is not the API root either');
+    // RFC 3986 §6.2.2: percent-encoded unreserved characters are the same
+    // path (%77p-json IS wp-json), and the storage layer canonicalizes them
+    // away — so the API-root check must see the decoded form too, or an
+    // encoded discovery link smuggles a bogus /wp-json base through to the
+    // store. Encoded slashes are reserved and stay encoded (uppercased):
+    // one path never reads as two.
+    assert(
+      derive('https://example.com', 'https://example.com/%77p-json')
+        === 'https://example.com',
+      'fully encoded slashless root: /%77p-json → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/%77%70-%6Ason/')
+        === 'https://example.com',
+      'fully encoded slashed root: /%77%70-%6Ason/ → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/wp-%6Ason')
+        === 'https://example.com',
+      'partially encoded slashless root: /wp-%6Ason → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/site%41/wp-json/')
+        === 'https://example.com/siteA',
+      'encoded subdirectory decodes to the canonical base the store will key');
+    assert(
+      derive('https://example.com', 'https://example.com/sub%2fdir/wp-json/')
+        === 'https://example.com/sub%2Fdir',
+      'an encoded slash stays encoded and uppercased — one segment, never two');
+    assert(
+      derive('https://example.com', 'https://example.com/wp-json/wp-json/')
+        === 'https://example.com/wp-json',
+      'an install literally based at /wp-json derives from /wp-json/wp-json/');
+    assert(
       derive('https://example.com', 'https://example.com/?rest_route=/')
         === 'https://example.com',
       'root install, plain permalinks → bare origin');
