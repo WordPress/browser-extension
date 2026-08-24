@@ -1,6 +1,6 @@
 {
   "name": "wordpress-browser-extension",
-  "version": "1.0.2",
+  "version": "1.0.3",
   "private": true,
   "description": "Browser extension that detects WordPress sites and surfaces admin/developer shortcuts.",
   "license": "MIT",
