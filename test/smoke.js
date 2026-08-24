@@ -893,10 +893,11 @@ async function main() {
   {
     console.log('\n[25] Subdirectory install base URL + admin link resolution');
 
-    // deriveBaseUrl across the URL shapes WordPress emits.
+    // deriveBase across the URL shapes WordPress emits (base value only —
+    // [45] covers the provenance it reports alongside it).
     const dom = new JSDOM(`<html><body></body></html>`);
     const ctx = loadModules(dom);
-    const derive = ctx.WPDetect.deriveBaseUrl;
+    const derive = (...a) => ctx.WPDetect.deriveBase(...a).baseUrl;
 
     assert(
       derive('https://example.com', 'https://example.com/wordpress/wp-json/')
@@ -910,6 +911,55 @@ async function main() {
       derive('https://example.com', 'https://example.com/wp-json/')
         === 'https://example.com',
       'root install: /wp-json/ → bare origin');
+    // rest_url() prints the trailing slash, but filters and hand-written
+    // hardening links can omit it. A terminal, segment-exact /wp-json is the
+    // API root either way — never part of the install base.
+    assert(
+      derive('https://example.com', 'https://example.com/wp-json')
+        === 'https://example.com',
+      'slashless root: /wp-json → bare origin, not a /wp-json base');
+    assert(
+      derive('https://example.com', 'https://example.com/wordpress/wp-json')
+        === 'https://example.com/wordpress',
+      'slashless subdirectory: /wordpress/wp-json → /wordpress base');
+    assert(
+      derive('https://example.com', 'https://example.com/not-wp-json')
+        === 'https://example.com/not-wp-json',
+      'a segment merely ending in wp-json is not the API root');
+    assert(
+      derive('https://example.com', 'https://example.com/wp-jsonish/')
+        === 'https://example.com/wp-jsonish',
+      'a segment merely starting with wp-json is not the API root either');
+    // RFC 3986 §6.2.2: percent-encoded unreserved characters are the same
+    // path (%77p-json IS wp-json), and the storage layer canonicalizes them
+    // away — so the API-root check must see the decoded form too, or an
+    // encoded discovery link smuggles a bogus /wp-json base through to the
+    // store. Encoded slashes are reserved and stay encoded (uppercased):
+    // one path never reads as two.
+    assert(
+      derive('https://example.com', 'https://example.com/%77p-json')
+        === 'https://example.com',
+      'fully encoded slashless root: /%77p-json → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/%77%70-%6Ason/')
+        === 'https://example.com',
+      'fully encoded slashed root: /%77%70-%6Ason/ → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/wp-%6Ason')
+        === 'https://example.com',
+      'partially encoded slashless root: /wp-%6Ason → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/site%41/wp-json/')
+        === 'https://example.com/siteA',
+      'encoded subdirectory decodes to the canonical base the store will key');
+    assert(
+      derive('https://example.com', 'https://example.com/sub%2fdir/wp-json/')
+        === 'https://example.com/sub%2Fdir',
+      'an encoded slash stays encoded and uppercased — one segment, never two');
+    assert(
+      derive('https://example.com', 'https://example.com/wp-json/wp-json/')
+        === 'https://example.com/wp-json',
+      'an install literally based at /wp-json derives from /wp-json/wp-json/');
     assert(
       derive('https://example.com', 'https://example.com/?rest_route=/')
         === 'https://example.com',
@@ -1208,12 +1258,15 @@ async function main() {
     const ORIGIN = 'https://www.example.com';
     // Admin screens never emit the REST discovery link; the pathname prefix
     // before the final boundary-delimited /wp-admin segment is the base.
-    // The fallback is gated on body.wp-admin, which admin_body_class prints
-    // on every core admin screen and never on the front end.
+    // The fallback is gated on body.wp-admin AND #wpwrap, both printed by
+    // wp-admin/admin-header.php on every core admin screen and never on the
+    // front end.
     const adminDom = new JSDOM(`
       <html><head></head><body class="wp-admin wp-core-ui">
-        <div id="wpadminbar">
-          <li id="wp-admin-bar-view-site"><a href="https://www.example.com/en-us/research/">Visit Site</a></li>
+        <div id="wpwrap">
+          <div id="wpadminbar">
+            <li id="wp-admin-bar-view-site"><a href="https://www.example.com/en-us/research/">Visit Site</a></li>
+          </div>
         </div>
       </body></html>
     `);
@@ -1465,6 +1518,98 @@ async function main() {
     const rootBump = WPMySites.upsertOnLogin(legacyActive, { origin: HOST, baseUrl: HOST, now: 9 });
     assert(rootBump[HOST].lastLoggedInAt === 9 && rootBump[HOST].customName === 'My Site' && !rootBump[SA],
       'root evidence bumps the pinned origin record in place; its key never changes');
+  }
+
+  // --- 45. baseUrl provenance: evidence vs. bare-origin fallback (#103) ---
+  {
+    console.log('\n[45] deriveBase reports HOW the base was derived (#103)');
+    const ORIGIN = 'https://client-a.example';
+    const dom = new JSDOM('<html><body></body></html>');
+    const ctx = loadModules(dom);
+    const derive = ctx.WPDetect.deriveBase;
+
+    // A root install's base is the bare origin whether it was CONFIRMED or
+    // merely guessed. That collision is the whole bug: the value alone can't
+    // tell the two apart, so `evidence` has to.
+    const restRoot = derive(ORIGIN, `${ORIGIN}/wp-json/`, null);
+    const adminRoot = derive(ORIGIN, null, '/wp-admin/index.php');
+    const fallback = derive(ORIGIN, null, null);
+    assert(restRoot.baseUrl === ORIGIN && adminRoot.baseUrl === ORIGIN && fallback.baseUrl === ORIGIN,
+      'all three root cases produce the identical bare-origin value');
+    assert(restRoot.evidence === 'rest', 'REST discovery root → evidence "rest"');
+    assert(adminRoot.evidence === 'admin-path', "a root install's own admin path → evidence \"admin-path\"");
+    assert(fallback.evidence === null, 'no derivation evidence → evidence null (a guess)');
+
+    assert(derive(ORIGIN, `${ORIGIN}/wordpress/wp-json/`, null).evidence === 'rest'
+      && derive(ORIGIN, null, '/wordpress/wp-admin/').evidence === 'admin-path',
+      'subdirectory bases report their provenance the same way');
+
+    // Values that prove nothing must not claim evidence, or the background's
+    // My Sites gate would accept a forged root.
+    assert(derive(ORIGIN, 'https://attacker.example/wp-json/', null).evidence === null,
+      'off-origin REST root → no evidence (falls back to the origin)');
+    assert(derive(ORIGIN, `blob:${ORIGIN}/some-uuid`, null).evidence === null,
+      'blob: REST root whose parsed origin matches → still no evidence');
+    const permalinkShape = derive(ORIGIN, null, '/guides/wp-admin/security/');
+    assert(permalinkShape.evidence === 'admin-path' && permalinkShape.baseUrl === `${ORIGIN}/guides`,
+      'deriveBase trusts any adminPathname it is given — the body.wp-admin gate is the caller\'s');
+    assert(derive(ORIGIN, null, '/sub%2Fdir/wp-admin/').evidence === null,
+      'encoded slash fails closed → no evidence');
+    assert(derive(ORIGIN, null, 'relative/wp-admin/').evidence === null,
+      'non-rooted pathname → no evidence');
+
+    // End to end through detectWordPress, on markup matching a real admin
+    // screen: WP prints `wp-admin` on the body but NOT `logged-in` there, and
+    // emits no REST or oEmbed discovery link — verified against a live
+    // WordPress 7.1 Dashboard. Login therefore rides on the admin bar alone,
+    // and that is the precondition for recording at all.
+    const adminDom = new JSDOM(
+      '<html><head><link rel="canonical" href="x"></head>'
+      + '<body class="wp-admin wp-core-ui index-php">'
+      + '<div id="wpwrap"><div id="wpadminbar"></div></div></body></html>',
+    );
+    const adminCtx = loadModules(adminDom);
+    const adminDet = adminCtx.WPDetect.detectWordPress(adminCtx.document, {
+      origin: ORIGIN, pathname: '/wp-admin/index.php',
+    });
+    assert(adminDet.context.isLoggedIn === true,
+      'a real admin screen reads as logged in without a `logged-in` body class');
+    assert(adminDet.context.restApiRoot === null,
+      'and carries no REST root — which is what made #103 invisible to the old gate');
+    assert(adminDet.context.baseUrl === ORIGIN && adminDet.context.baseUrlEvidence === 'admin-path',
+      "a root install's admin screen reports admin-path evidence (the #103 case)");
+
+    // An admin document is body.wp-admin AND #wpwrap — both printed by
+    // wp-admin/admin-header.php on every core admin screen (Dashboard,
+    // editor, profile, network and user admin all include it). A front-end
+    // page that merely carries a `wp-admin` body class (themes and plugins
+    // can add one) is not an admin document, so its pathname derives nothing
+    // and no admin-path evidence is claimed. A practical correctness gate,
+    // not a security boundary — the background independently re-derives the
+    // base from the browser-attested path before trusting any claim.
+    const spoofDom = new JSDOM(
+      '<html><head><meta name="generator" content="WordPress 6.8"></head>'
+      + '<body class="wp-admin logged-in"><div id="wpadminbar"></div></body></html>',
+    );
+    const spoofCtx = loadModules(spoofDom);
+    const spoofDet = spoofCtx.WPDetect.detectWordPress(spoofCtx.document, {
+      origin: ORIGIN, pathname: '/press/wp-admin/tour/',
+    });
+    assert(spoofDet.context.baseUrl === ORIGIN && spoofDet.context.baseUrlEvidence === null,
+      'body.wp-admin without #wpwrap is not an admin document — no derivation, no evidence');
+
+    // The same page shape on the front end, REST link stripped: identical
+    // baseUrl, no evidence.
+    const frontDom = new JSDOM(`
+      <html><head><meta name="generator" content="WordPress 6.8"></head>
+      <body class="home logged-in admin-bar"><div id="wpadminbar"></div></body></html>
+    `);
+    const frontCtx = loadModules(frontDom);
+    const frontDet = frontCtx.WPDetect.detectWordPress(frontCtx.document, {
+      origin: ORIGIN, pathname: '/',
+    });
+    assert(frontDet.context.baseUrl === ORIGIN && frontDet.context.baseUrlEvidence === null,
+      'a REST-stripped front page reports the same base with NO evidence');
   }
 
   console.log(`\n${failures === 0 ? 'All tests passed.' : failures + ' failure(s).'}`);

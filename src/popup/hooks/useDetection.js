@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
-import { adminBaseFromProbe } from '../lib/adminBase';
+import { reconcileProbeBase, probeMatchesTab } from '../lib/adminBase';
+import { probePageState } from '../lib/pageProbe';
 
 // Poll the content script for live detection until it answers or a short
 // budget elapses. Content scripts inject at document_idle, so a popup opened
@@ -94,149 +95,52 @@ export function useDetection() {
 				// (which may be orphaned post-extension-reload, holding a stale
 				// captured detection from before the user logged in). Cheap: one
 				// IPC, a few selector lookups. Authoritative for "is the admin bar
-				// actually in this DOM right now?"
+				// actually in this DOM right now?" The probe function lives in
+				// lib/pageProbe.js: executeScript serializes it, so it must stay
+				// self-contained, and the module boundary lets tests drive it
+				// against a real DOM.
+				// Fail closed: only a probe that ran AND reported the captured
+				// tab's own document URL confirms this resolution describes
+				// that document. A missing, failed, malformed, or navigated
+				// probe leaves it unconfirmed — the popup still renders from
+				// captured data, but nothing is pushed to the background and
+				// the credentialed fresh fetch is skipped, so two documents
+				// can never blend into one claim.
+				let probeConfirmed = false;
 				try {
 					const [out] = await chrome.scripting.executeScript({
 						target: { tabId: tab.id },
-						func: async () => {
-							// Race guard: popups opened before DOMContentLoaded see a
-							// half-parsed <body>, and WordPress prints the admin bar
-							// via wp_footer near the *end* of <body>. body.logged-in
-							// is set on the body tag itself (parsed first), so we can
-							// observe "logged in but no admin bar" purely because the
-							// admin bar markup hasn't streamed in yet. Wait for the
-							// body to finish parsing before probing. Cap the wait so
-							// a stalled page doesn't hang the popup.
-							if (document.readyState === 'loading') {
-								await new Promise((resolve) => {
-									const t = setTimeout(resolve, 1500);
-									document.addEventListener('DOMContentLoaded', () => {
-										clearTimeout(t);
-										resolve();
-									}, { once: true });
-								});
-							}
-							const ab = document.getElementById('wpadminbar');
-							const body = document.body;
-							const bodyLoggedIn = body?.classList?.contains('logged-in') || false;
-							// admin_body_class prints `wp-admin` on every core admin
-							// page and never on the front end — the same gate
-							// lib/detect.js uses before trusting the pathname (#88).
-							const bodyAdmin = body?.classList?.contains('wp-admin') || false;
-							// Site icon — same priority order and same scheme allowlist
-							// as detect.js. Captured here too so the popup still has
-							// it when the content script is unavailable (extension
-							// reload race).
-							const iconLink =
-								document.querySelector('link[rel="icon"][sizes="192x192"]')
-								|| document.querySelector('link[rel="apple-touch-icon"]')
-								|| document.querySelector('link[rel="icon"][sizes="32x32"]');
-							let siteIconUrl = null;
-							if (iconLink && iconLink.getAttribute('href')) {
-								try {
-									const p = new URL(iconLink.href).protocol;
-									if (p === 'http:' || p === 'https:' || p === 'data:') {
-										siteIconUrl = iconLink.href;
-									}
-								} catch (_) { /* malformed href, skip */ }
-							}
-							const qmPanel = document.getElementById('query-monitor-main');
-							// QM has two visible states: `qm-show` (full panel) and
-							// `qm-peek` (mini bar at bottom). Either counts as "open."
-							const qmOpen = !!qmPanel && (
-								qmPanel.classList.contains('qm-show') ||
-								qmPanel.classList.contains('qm-peek')
-							);
-							if (!ab) return {
-								hasAdminBar: false,
-								bodyLoggedIn,
-								bodyAdmin,
-								hasQueryMonitor: !!qmPanel,
-								qmOpen,
-								siteIconUrl,
-							};
-							const edit    = ab.querySelector('#wp-admin-bar-edit a[href]');
-							const view    = ab.querySelector('#wp-admin-bar-view a[href]');
-							const preview = ab.querySelector('#wp-admin-bar-preview a[href]');
-							const logout  = ab.querySelector('#wp-admin-bar-logout a[href]');
-							// Admin screens only (the node does not exist on the front
-							// end); carries home_url — validated at point of use.
-							const visitSite = ab.querySelector('#wp-admin-bar-view-site a[href]');
-							const userInfoImg = ab.querySelector('#wp-admin-bar-user-info img.avatar');
-							const fallbackImg = ab.querySelector('#wp-admin-bar-my-account img.avatar');
-							const avatarImg = userInfoImg || fallbackImg;
-							let userAvatarUrl = null;
-							if (avatarImg && avatarImg.getAttribute('src')) {
-								try {
-									const p = new URL(avatarImg.src).protocol;
-									if (p === 'http:' || p === 'https:' || p === 'data:') {
-										userAvatarUrl = avatarImg.src;
-									}
-								} catch (_) { /* malformed avatar URL, skip */ }
-							}
-							const displayNameEl =
-								ab.querySelector('#wp-admin-bar-user-info .display-name')
-								|| ab.querySelector('#wp-admin-bar-my-account .display-name');
-							const userDisplayName = (displayNameEl?.textContent || '').trim() || null;
-							const editProfile = ab.querySelector('#wp-admin-bar-edit-profile a[href]');
-							const isSuperAdmin = !!ab.querySelector('#wp-admin-bar-network-admin');
-							const newLinks = ab.querySelectorAll('#wp-admin-bar-new-content .ab-submenu > li[id] > a[href]');
-							// Same-origin + /wp-admin/ guard: hrefs come from page DOM
-							// and a malicious page could fake the admin bar with
-							// off-origin links the popup would then navigate to.
-							const newContentItems = Array.from(newLinks).map((a) => {
-								const li = a.closest('li[id]');
-								const id = li ? li.id.replace(/^wp-admin-bar-new-/, '') : '';
-								const label = (a.textContent || '').trim();
-								if (!id || !label) return null;
-								try {
-									const u = new URL(a.href);
-									if (u.origin !== location.origin) return null;
-									// Subdir installs serve /wp-admin/ under a prefix
-									// (e.g. /wordpress/wp-admin/) — match anywhere (#33).
-									if (!/\/wp-admin\//.test(u.pathname)) return null;
-								} catch (_) { return null; }
-								return { id, label, href: a.href };
-							}).filter(Boolean);
-							return {
-								hasAdminBar: true,
-								bodyLoggedIn,
-								bodyAdmin,
-								adminBarEditHref: edit?.href || null,
-								adminBarViewHref: view?.href || preview?.href || null,
-								adminBarLogoutHref: logout?.href || null,
-								adminBarVisitSiteHref: visitSite?.href || null,
-								userAvatarUrl,
-								userDisplayName,
-								userEditProfileHref: editProfile?.href || null,
-								isSuperAdmin,
-								postStatus: view ? 'publish' : (preview ? 'draft' : null),
-								newContentItems,
-								hasQueryMonitor: !!qmPanel || !!ab.querySelector('#wp-admin-bar-query-monitor'),
-								qmOpen,
-								siteIconUrl,
-							};
-						},
+						func: probePageState,
 					});
 					const live = out?.result;
-					if (live) {
+					probeConfirmed = !!(live && probeMatchesTab(live.href, tab.url));
+					if (probeConfirmed) {
 						const lc = result.detection.context;
 						// `bodyLoggedIn` reflects WP's `body.logged-in` body class —
 						// i.e., the page render came from an authenticated request.
 						// Distinct from `isLoggedIn`, which can be true via the
 						// cookie API even when the page DOM is logged-out HTML.
 						lc.bodyLoggedIn = !!live.bodyLoggedIn;
-						// Cache-only fallback (#88): a context synthesized from the
-						// detection cache has no baseUrl (the orphaned content
-						// script never reported one), which collapsed synthesized
-						// admin links to the bare origin on subdirectory installs.
-						// When the probe confirms a real admin document, recover
-						// the base from the tab's own pathname with lib/detect.js's
-						// rules. Live detections always carry a baseUrl and are
-						// never overridden.
-						if (!lc.baseUrl) {
-							const derived = adminBaseFromProbe(origin, url.pathname, !!live.bodyAdmin);
-							if (derived) lc.baseUrl = derived;
+						// Base recovery and evidence upgrade (#88, #103): a context
+						// synthesized from the detection cache has no baseUrl at
+						// all — adopt the probe derivation so synthesized admin
+						// links keep their subdirectory prefix. A context from an
+						// orphaned 1.0.2 content script HAS a baseUrl (the old
+						// code always derived a value) but predates the evidence
+						// field, which read as "no evidence" and kept admin-only
+						// root installs out of My Sites even after the update.
+						// reconcileProbeBase upgrades the evidence in place for
+						// that shape — only when the tab's own derivation agrees
+						// with the stored base; it never replaces a disagreeing
+						// base, and never touches a context that already carries
+						// evidence.
+						const patch = reconcileProbeBase(
+							lc.baseUrl || null, lc.baseUrlEvidence,
+							origin, url.pathname, !!live.bodyAdmin,
+						);
+						if (patch) {
+							lc.baseUrl = patch.baseUrl;
+							lc.baseUrlEvidence = patch.evidence;
 						}
 						if (live.siteIconUrl) lc.siteIconUrl = live.siteIconUrl;
 						if (live.hasAdminBar) {
@@ -279,22 +183,35 @@ export function useDetection() {
 
 				// Push the popup's final resolution back to the background so the
 				// toolbar icon and cache reflect any login override that DOM-based
-				// detection missed (cookie API). Fire-and-forget.
-				chrome.runtime.sendMessage({
-					type: 'POPUP_DETECTION_RESOLVED',
-					origin,
-					tabId: tab.id,
-					isWordPress: true,
-					isLoggedIn: !!result.detection.context.isLoggedIn,
-					baseUrl: result.detection.context.baseUrl || null,
-					// The REST root lets the background tell a REST-confirmed
-					// root install from deriveBaseUrl's bare-origin fallback;
-					// the pathname lets a base-less login be attributed to the
-					// subdirectory install that owns the path (#94).
-					restApiRoot: result.detection.context.restApiRoot || null,
-					pathname: url.pathname,
-					siteIconUrl: result.detection.context.siteIconUrl || null,
-				}).catch(() => {});
+				// detection missed (cookie API). Fire-and-forget. Only a
+				// probe-confirmed resolution is pushed: a resolution pairs its
+				// claims with the captured pathname, and without confirmation the
+				// document may not be the one that pathname names — the next
+				// popup open (or the page's own content script, whose claims the
+				// background checks against browser-attested sender data)
+				// resolves it instead.
+				if (probeConfirmed) {
+					chrome.runtime.sendMessage({
+						type: 'POPUP_DETECTION_RESOLVED',
+						origin,
+						tabId: tab.id,
+						isWordPress: true,
+						isLoggedIn: !!result.detection.context.isLoggedIn,
+						baseUrl: result.detection.context.baseUrl || null,
+						// The REST root and baseUrlEvidence are how the background
+						// tells a CONFIRMED root install — by REST link (#94) or by a
+						// root install's own admin path (#103) — from deriveBase's
+						// bare-origin fallback, which looks identical by value. The
+						// background re-derives both routes from the REST root and
+						// the pathname and requires the result to match the claim;
+						// the pathname also lets a base-less login be attributed to
+						// the install owning it (#94).
+						restApiRoot: result.detection.context.restApiRoot || null,
+						baseUrlEvidence: result.detection.context.baseUrlEvidence || null,
+						pathname: url.pathname,
+						siteIconUrl: result.detection.context.siteIconUrl || null,
+					}).catch(() => {});
+				}
 
 				// Render now with what we have. The fresh-fetch below can take
 				// hundreds of ms (full HTTP fetch + HTML parse) and was previously
@@ -308,8 +225,10 @@ export function useDetection() {
 				// request. Re-fetch with credentials and merge admin-bar-derived
 				// fields (edit href, +New menu, sign-out nonce, etc.) so the
 				// popup gets richer over time. We don't overwrite hasAdminBar —
-				// the live DOM still lacks the bar.
-				if (loggedInByCookie && !result.detection.context.hasAdminBar) {
+				// the live DOM still lacks the bar. Gated on probe confirmation
+				// for the same reason as the push above: unconfirmed, the fresh
+				// fetch could describe a different document than the capture.
+				if (probeConfirmed && loggedInByCookie && !result.detection.context.hasAdminBar) {
 					try {
 						const fresh = await Promise.race([
 							chrome.tabs.sendMessage(tab.id, { type: 'GET_FRESH_DETECTION' }),
@@ -335,6 +254,7 @@ export function useDetection() {
 								isLoggedIn: false,
 								baseUrl: lc.baseUrl || null,
 								restApiRoot: lc.restApiRoot || null,
+								baseUrlEvidence: lc.baseUrlEvidence || null,
 								pathname: url.pathname,
 								siteIconUrl: lc.siteIconUrl || null,
 							}).catch(() => {});

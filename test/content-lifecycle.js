@@ -269,7 +269,7 @@ async function main() {
   {
     console.log('\n[44] location.pathname reaches detectWordPress at every callsite (#88)');
     const ADMIN_PAGE = '<html><head></head><body class="wp-admin wp-core-ui">'
-      + '<div id="wpadminbar"></div></body></html>';
+      + '<div id="wpwrap"><div id="wpadminbar"></div></div></body></html>';
     const ADMIN_PATH = '/en-us/research/wp-admin/index.php';
     const page = makePage(ADMIN_PAGE, { url: `https://example.com${ADMIN_PATH}` });
 

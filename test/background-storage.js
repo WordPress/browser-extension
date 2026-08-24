@@ -17,6 +17,16 @@ const mySitesSrc = read('lib', 'my-sites.js');
 const restSrc = read('lib', 'rest.js');
 const backgroundSrc = read('background.js');
 
+/** The popup's own base-recovery helper, wired to the REAL lib/detect.js, so
+ * the frontend seam and the background gate are exercised as one pipeline
+ * rather than two separately-mocked halves. */
+function loadAdminBaseFromProbe() {
+  const detectCtx = {};
+  new Function('globalThis', read('lib', 'detect.js'))(detectCtx);
+  const src = read('src', 'popup', 'lib', 'adminBase.js').replace(/^export /gm, '');
+  return new Function('window', `${src}\nreturn adminBaseFromProbe;`)({ WPDetect: detectCtx.WPDetect });
+}
+
 let failures = 0;
 function assert(cond, msg) {
   if (!cond) { failures++; console.error('  FAIL:', msg); }
@@ -74,6 +84,7 @@ function loadBackground(storage) {
   const libCtx = {};
   new Function('globalThis', mySitesSrc)(libCtx);
   new Function('globalThis', 'document', 'window', restSrc)(libCtx, undefined, undefined);
+  new Function('globalThis', read('lib', 'detect.js'))(libCtx);
 
   const listeners = { message: [] };
   const iconCalls = [];
@@ -132,8 +143,8 @@ function loadBackground(storage) {
     },
   };
 
-  new Function('globalThis', 'chrome', 'importScripts', 'WPMySites', 'WPRest', backgroundSrc)(
-    {}, chromeStub, () => {}, libCtx.WPMySites, libCtx.WPRest,
+  new Function('globalThis', 'chrome', 'importScripts', 'WPMySites', 'WPRest', 'WPDetect', backgroundSrc)(
+    {}, chromeStub, () => {}, libCtx.WPMySites, libCtx.WPRest, libCtx.WPDetect,
   );
 
   assert(listeners.message.length === 1, 'background registered one onMessage listener');
@@ -383,7 +394,7 @@ async function main() {
         hostFromDOM: 'selfhosted',
       }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
 
-      // deriveBaseUrl reports the bare origin as a FALLBACK for pages with
+      // deriveBase reports the bare origin as a FALLBACK for pages with
       // no derivation evidence (wp-login.php, REST-stripped fronts). Such a
       // page must not mint a speculative bare-origin row — and neither must
       // root-EQUIVALENT variants (trailing slash, query/fragment-only) or
@@ -416,6 +427,326 @@ async function main() {
       assert(after[SA]?.dismissed === true, 'no passive detection revives the removed install');
       assert(Object.keys(after).length === 2, 'and no sibling or origin duplicate was minted');
       assert(after[HOST]?.dismissed === undefined, 'the root record is untouched');
+    }
+    {
+      // #103: a root install browsed only through wp-admin. admin_head prints
+      // no REST discovery link, so #94's gate saw the bare-origin base, read
+      // it as the no-evidence FALLBACK, and dropped every login — the site
+      // never entered My Sites however often it was visited. baseUrlEvidence
+      // separates the two, and the browser-attested pathname cross-checks it.
+      const storage = makeStorage({});
+      const { send } = loadBackground(storage);
+      const detect = (path, ctx) => send({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 90, signals: ['admin-bar-element'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+
+      await detect('/wp-admin/index.php',
+        { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await settle();
+      assert(!!storage.read(MY_SITES_KEY)?.[HOST],
+        "a root install's wp-admin screen is recorded (#103)");
+
+      // Still no speculative rows: an admin-path CLAIM whose browser-attested
+      // path has no wp-admin segment is a lie or an accident (a theme adding
+      // `wp-admin` to a front-end body class), and a subdirectory install
+      // must not be able to claim the root that way.
+      const storage2 = makeStorage({});
+      const { send: send2 } = loadBackground(storage2);
+      const detect2 = (path, ctx) => send2({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 90, signals: ['admin-bar-element'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+      await detect2('/blog/hello-world/', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await detect2('/', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await detect2('/wp-administration/x', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await detect2('/sub%2Fdir/wp-admin/', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await detect2('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: null });
+      await detect2('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'rest' });
+      await settle();
+      assert(Object.keys(storage2.read(MY_SITES_KEY) || {}).length === 0,
+        'an admin-path claim unsupported by the browser-attested path mints nothing');
+
+      // The popup's resolution path applies the same gate (cookie-API logins
+      // on an admin screen, and the #88 cache-only fallback).
+      const storage3 = makeStorage({});
+      const { send: send3 } = loadBackground(storage3);
+      await send3({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/wp-admin/options-general.php',
+      }, POPUP_SENDER);
+      await settle();
+      assert(!!storage3.read(MY_SITES_KEY)?.[HOST],
+        'the popup resolution records a root install from its admin screen too');
+      await send3({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/not-admin/',
+      }, POPUP_SENDER);
+      await settle();
+      assert(Object.keys(storage3.read(MY_SITES_KEY)).length === 1,
+        'and rejects the same claim from a non-admin path');
+
+      // Sticky removal still holds against the new evidence path.
+      const storage4 = makeStorage({});
+      const { send: send4 } = loadBackground(storage4);
+      const detect4 = (path, ctx) => send4({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 90, signals: ['admin-bar-element'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+      await detect4('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await send4({ type: 'MUTATE_MY_SITES', op: 'remove', key: HOST }, POPUP_SENDER);
+      await settle();
+      await detect4('/wp-admin/edit.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      await settle();
+      const after103 = storage4.read(MY_SITES_KEY);
+      assert(after103[HOST]?.dismissed === true && Object.keys(after103).length === 1,
+        'a dismissed root install is not revived by a later admin visit');
+
+      // The reporter's scenario: several managed sites, admin-only browsing.
+      const storage5 = makeStorage({});
+      const { send: send5 } = loadBackground(storage5);
+      for (const name of ['a', 'b', 'c', 'd', 'e']) {
+        const origin = `https://client-${name}.example`;
+        const url = `${origin}/wp-admin/index.php`;
+        await send5({
+          type: 'WP_DETECTION',
+          detection: {
+            isWordPress: true, confidence: 90, signals: ['admin-bar-element'],
+            context: { isLoggedIn: true, baseUrl: origin, baseUrlEvidence: 'admin-path' },
+          },
+          hostFromDOM: 'selfhosted',
+        }, { url, origin, tab: { id: 7, url } });
+      }
+      await settle();
+      assert(Object.keys(storage5.read(MY_SITES_KEY) || {}).length === 5,
+        'five admin-only managed sites all persist (the reported symptom)');
+
+      // The browser-attested path falls back to the sender TAB's url when
+      // sender.url is absent (content scripts are top-frame only, so the two
+      // agree). Without that fallback the gate — and the pre-existing
+      // subdirectory login attribution — would silently lose the path.
+      const storage6 = makeStorage({});
+      const { send: send6 } = loadBackground(storage6);
+      await send6({
+        type: 'WP_DETECTION',
+        detection: {
+          isWordPress: true, confidence: 90, signals: ['admin-bar-element'],
+          context: { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' },
+        },
+        hostFromDOM: 'selfhosted',
+      }, { origin: HOST, tab: { id: 7, url: `${HOST}/wp-admin/index.php` } });
+      await settle();
+      assert(!!storage6.read(MY_SITES_KEY)?.[HOST],
+        'the path is recovered from sender.tab.url when sender.url is absent');
+
+      // Frontend → backend as one pipeline: the popup's #88 cache-only
+      // fallback (orphaned content script, no live baseUrl) recovers the base
+      // with the real adminBaseFromProbe, and the resulting payload has to
+      // clear the real gate. The hook orchestration itself is driven by
+      // actions.mjs [46].
+      const adminBaseFromProbe = loadAdminBaseFromProbe();
+      const resolveFromProbe = async (send, tabPath, bodyAdmin) => {
+        const derived = adminBaseFromProbe(HOST, tabPath, bodyAdmin);
+        return send({
+          type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+          baseUrl: derived?.baseUrl || null,
+          baseUrlEvidence: derived?.evidence || null,
+          pathname: tabPath,
+        }, POPUP_SENDER);
+      };
+
+      const storage7 = makeStorage({});
+      const { send: send7 } = loadBackground(storage7);
+      await resolveFromProbe(send7, '/wp-admin/index.php', true);
+      await settle();
+      assert(!!storage7.read(MY_SITES_KEY)?.[HOST],
+        'popup fallback → gate: a root install recovered from its admin tab records');
+
+      const storage8 = makeStorage({});
+      const { send: send8 } = loadBackground(storage8);
+      await resolveFromProbe(send8, '/siteA/wp-admin/edit.php', true);
+      await settle();
+      assert(!!storage8.read(MY_SITES_KEY)?.[SA],
+        'popup fallback → gate: a subdirectory install keys by its install base');
+
+      const storage9 = makeStorage({});
+      const { send: send9 } = loadBackground(storage9);
+      // Not an admin document (probe unconfirmed), and a fail-closed encoded
+      // slash: both must reach the gate with no evidence and mint nothing.
+      await resolveFromProbe(send9, '/guides/wp-admin/security/', false);
+      await resolveFromProbe(send9, '/sub%2Fdir/wp-admin/', true);
+      await settle();
+      assert(Object.keys(storage9.read(MY_SITES_KEY) || {}).length === 0,
+        'popup fallback → gate: unconfirmed and fail-closed probes mint nothing');
+    }
+    {
+      // Root confirmation is BOUND to what the trustworthy inputs actually
+      // derive: the gate re-derives the expected base from the browser-attested
+      // pathname (admin evidence) or from the REST root itself (rest evidence)
+      // with lib/detect.js's deriveBase, and the claim must MATCH. An admin
+      // path under /siteA derives /siteA, so it can never confirm a bare-origin
+      // claim; neither can a REST root living under /siteA/wp-json/.
+      const mkDetect = (send) => (path, ctx) => send({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 90, signals: ['admin-bar-element'], context: ctx },
+        hostFromDOM: 'selfhosted',
+      }, { url: HOST + path, origin: HOST, tab: { id: 7, url: HOST + path } });
+
+      const storageB = makeStorage({});
+      const { send: sendB } = loadBackground(storageB);
+      const detectB = mkDetect(sendB);
+      // Admin evidence whose attested path derives a SUBDIRECTORY base.
+      await detectB('/siteA/wp-admin/edit.php',
+        { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 'admin-path' });
+      // A same-origin REST root that derives a subdirectory base.
+      await detectB('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/siteA/wp-json/` });
+      // Non-string and forged evidence values fail closed.
+      await detectB('/wp-admin/index.php', { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: 123 });
+      await detectB('/wp-admin/index.php',
+        { isLoggedIn: true, baseUrl: HOST, baseUrlEvidence: { toString: () => 'admin-path' } });
+      await settle();
+      assert(Object.keys(storageB.read(MY_SITES_KEY) || {}).length === 0,
+        'a bare-origin claim is confirmed only by a derivation that matches it');
+
+      // The same mismatched claims through the popup resolution path.
+      const storageBP = makeStorage({});
+      const { send: sendBP } = loadBackground(storageBP);
+      await sendBP({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/siteA/wp-admin/edit.php',
+      }, POPUP_SENDER);
+      await sendBP({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, restApiRoot: `${HOST}/siteA/wp-json/`, pathname: '/',
+      }, POPUP_SENDER);
+      await settle();
+      assert(Object.keys(storageBP.read(MY_SITES_KEY) || {}).length === 0,
+        'the popup path applies the same match requirement');
+
+      // The REST shapes WordPress really prints for a root install still
+      // confirm it: pretty permalinks (/wp-json/) and plain (/?rest_route=/).
+      const storageBR = makeStorage({});
+      const { send: sendBR } = loadBackground(storageBR);
+      const detectBR = mkDetect(sendBR);
+      await detectBR('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/wp-json/` });
+      await settle();
+      assert(!!storageBR.read(MY_SITES_KEY)?.[HOST], 'a root /wp-json/ REST root still confirms');
+      const storageBR2 = makeStorage({});
+      const { send: sendBR2 } = loadBackground(storageBR2);
+      await mkDetect(sendBR2)('/', { isLoggedIn: true, baseUrl: HOST, restApiRoot: `${HOST}/?rest_route=/` });
+      await settle();
+      assert(!!storageBR2.read(MY_SITES_KEY)?.[HOST], 'a plain-permalink REST root still confirms');
+
+      // Sticky removal holds through the popup resolution path too.
+      const storageBS = makeStorage({});
+      const { send: sendBS } = loadBackground(storageBS);
+      const popupAdmin = () => sendBS({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/wp-admin/index.php',
+      }, POPUP_SENDER);
+      await popupAdmin();
+      await sendBS({ type: 'MUTATE_MY_SITES', op: 'remove', key: HOST }, POPUP_SENDER);
+      await settle();
+      await popupAdmin();
+      await settle();
+      const afterBS = storageBS.read(MY_SITES_KEY);
+      assert(afterBS[HOST]?.dismissed === true && Object.keys(afterBS).length === 1,
+        'sticky removal holds through the popup resolution path');
+
+      // v1.0.1 pinning through the popup path: the ambiguous legacy origin
+      // record stays pinned with its curation; sibling admin evidence records
+      // separately; root admin evidence bumps the pinned record in place.
+      const legacyPin = {
+        [HOST]: { origin: HOST, baseUrl: HOST, addedAt: 1, lastLoggedInAt: 5, customName: 'Mine' },
+      };
+      const storageBL = makeStorage({ [MY_SITES_KEY]: structuredClone(legacyPin) });
+      const { send: sendBL } = loadBackground(storageBL);
+      await sendBL({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: SA, baseUrlEvidence: 'admin-path', pathname: '/siteA/wp-admin/edit.php',
+      }, POPUP_SENDER);
+      await settle();
+      const storeBL = storageBL.read(MY_SITES_KEY);
+      assert(storeBL[HOST]?.customName === 'Mine' && !!storeBL[SA]
+        && Object.keys(storeBL).length === 2,
+        'popup-path sibling evidence records separately; the pinned record keeps its curation');
+      await sendBL({
+        type: 'POPUP_DETECTION_RESOLVED', origin: HOST, isWordPress: true, isLoggedIn: true,
+        baseUrl: HOST, baseUrlEvidence: 'admin-path', pathname: '/wp-admin/index.php',
+      }, POPUP_SENDER);
+      await settle();
+      const storeBL2 = storageBL.read(MY_SITES_KEY);
+      assert(storeBL2[HOST]?.customName === 'Mine' && storeBL2[HOST].lastLoggedInAt > 5
+        && Object.keys(storeBL2).length === 2,
+        'popup-path root evidence bumps the pinned origin record in place');
+    }
+    {
+      // Slashless REST discovery roots, real pipeline: detectWordPress output
+      // feeds the gate unmodified — no hand-built context. rest_url() prints
+      // the trailing slash, but filters and hand-written links can omit it,
+      // and a terminal segment-exact /wp-json is the API root either way,
+      // never part of the install base. The slashless root used to derive
+      // <origin>/wp-json as a base and mint a bogus /wp-json row.
+      const { JSDOM } = require('jsdom');
+      const pipeDetect = {};
+      new Function('globalThis', read('lib', 'detect.js'))(pipeDetect);
+      const pipeline = async (href) => {
+        const storage = makeStorage({});
+        const { send } = loadBackground(storage);
+        const dom = new JSDOM('<html><head>'
+          + `<link rel="https://api.w.org/" href="${href}">`
+          + '</head><body class="home logged-in admin-bar">'
+          + '<div id="wpadminbar"></div></body></html>');
+        const detection = pipeDetect.WPDetect.detectWordPress(dom.window.document, {
+          origin: HOST, pathname: '/',
+        });
+        await send({ type: 'WP_DETECTION', detection, hostFromDOM: 'selfhosted' },
+          { url: `${HOST}/`, origin: HOST, tab: { id: 7, url: `${HOST}/` } });
+        await settle();
+        return storage.read(MY_SITES_KEY) || {};
+      };
+
+      const rootSlashed = await pipeline(`${HOST}/wp-json/`);
+      assert(!!rootSlashed[HOST] && Object.keys(rootSlashed).length === 1,
+        'pipeline: root /wp-json/ records the origin');
+      const rootBare = await pipeline(`${HOST}/wp-json`);
+      assert(!!rootBare[HOST] && Object.keys(rootBare).length === 1,
+        'pipeline: slashless /wp-json records the origin, not a /wp-json row');
+      const subSlashed = await pipeline(`${SA}/wp-json/`);
+      assert(!!subSlashed[SA] && Object.keys(subSlashed).length === 1,
+        'pipeline: subdirectory /siteA/wp-json/ records the /siteA install');
+      const subBare = await pipeline(`${SA}/wp-json`);
+      assert(!!subBare[SA] && Object.keys(subBare).length === 1,
+        'pipeline: slashless /siteA/wp-json records /siteA, not a /siteA/wp-json row');
+
+      // Encoded API-root forms: RFC 3986 unreserved encoding must not
+      // smuggle a /wp-json base past the gate. The store canonicalizes
+      // %77p-json to wp-json at its boundary, so the derivation has to see
+      // the decoded form too. None of these may create a stored base ending
+      // in /wp-json.
+      for (const enc of ['/%77p-json', '/%77p-json/', '/wp-%6Ason', '/%77%70-%6Ason/']) {
+        const store = await pipeline(HOST + enc);
+        const keys = Object.keys(store);
+        assert(!!store[HOST] && keys.length === 1,
+          `pipeline: encoded root ${enc} records the origin`);
+        assert(keys.every((k) => !k.endsWith('/wp-json')),
+          `pipeline: encoded root ${enc} mints no /wp-json-suffixed key`);
+      }
+      const encSub = await pipeline(`${HOST}/site%41/wp-json`);
+      assert(!!encSub[SA] && Object.keys(encSub).length === 1,
+        'pipeline: encoded subdirectory /site%41/wp-json records /siteA');
+      const encSlash = await pipeline(`${HOST}/sub%2Fdir/wp-json/`);
+      assert(!!encSlash[`${HOST}/sub%2Fdir`] && Object.keys(encSlash).length === 1,
+        'pipeline: an encoded slash stays one segment in the stored key');
+      // An install genuinely living at /wp-json keeps working — its own
+      // discovery link is /wp-json/wp-json, and its row is legitimate. This
+      // is also why no blind migration deletes old /wp-json rows.
+      const literalWpJson = await pipeline(`${HOST}/wp-json/wp-json`);
+      assert(!!literalWpJson[`${HOST}/wp-json`] && Object.keys(literalWpJson).length === 1,
+        'pipeline: an install literally based at /wp-json still records its own row');
     }
     {
       // v1.0.1 ambiguity, end to end: a subdirectory install seen only via
