@@ -132,10 +132,11 @@
       } catch (_) { /* malformed href, skip */ }
     }
 
-    // Resolved before the signal checks below: the oEmbed link validates its
-    // href against this origin before that href is trusted as a REST root,
-    // and the base URL derivation downstream needs both so every synthesized
-    // admin/login link picks up a subdirectory prefix.
+    // Resolved before the signal checks below: the oEmbed link is validated
+    // against this origin before it may count as a detection signal (nothing
+    // else is derived from its href), and the base URL derivation downstream
+    // needs both so every synthesized admin/login link picks up a
+    // subdirectory prefix.
     const docOrigin = options.origin
       || (doc.defaultView && doc.defaultView.location && doc.defaultView.location.origin)
       || null;
@@ -628,8 +629,6 @@
     // core and by nothing else, whereas `home`/`single`/`archive` are names
     // any site can use. Scored as its own, stronger signal (#101).
     let sawCoreWpClass = false;
-    let templateSlug = null;   // wp-theme-<get_template()>
-    let stylesheetSlug = null; // wp-child-theme-<get_stylesheet()>
     const ctx = result.context;
 
     for (const cls of classList) {
@@ -638,11 +637,8 @@
           || cls === 'wp-custom-logo') {
         sawCoreWpClass = true;
       }
-      if (cls.startsWith('wp-child-theme-') && cls.length > 15) {
-        stylesheetSlug = cls.slice(15);
-        sawCoreWpClass = true;
-      } else if (cls.startsWith('wp-theme-') && cls.length > 9) {
-        templateSlug = cls.slice(9);
+      if ((cls.startsWith('wp-child-theme-') && cls.length > 15)
+          || (cls.startsWith('wp-theme-') && cls.length > 9)) {
         sawCoreWpClass = true;
       }
 
@@ -773,13 +769,6 @@
       result.confidence += 20;
     }
 
-    // body_class() prints the parent as wp-theme-<template> and, on a child
-    // theme, the active stylesheet as wp-child-theme-<stylesheet> — so the
-    // child wins, matching what the asset scan reports (the active theme).
-    // Only a fallback: the scan runs first and its answer stands.
-    if (!ctx.themeSlug && (stylesheetSlug || templateSlug)) {
-      ctx.themeSlug = stylesheetSlug || templateSlug;
-    }
   }
 
   /**

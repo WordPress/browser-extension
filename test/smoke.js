@@ -1633,10 +1633,6 @@ async function main() {
     assert(hd.signals.includes('wp-core-body-class'), 'core wp-* body classes signal');
     assert(hd.signals.includes('wp-enqueue-handles'), 'enqueue handle ids signal');
     assert(hd.signals.includes('wp-comment-form'), 'comment form signal');
-    // No /wp-content/ path anywhere above, so the theme slug can only have
-    // come from wp-child-theme-* — the child, not the parent.
-    assert(hd.context.themeSlug === 'magazine-pro',
-      'active (child) theme slug recovered from body classes');
 
     // Each new signal is individually below the threshold except where it is
     // WordPress-exclusive: core body classes alone must not be conclusive.
@@ -1646,14 +1642,6 @@ async function main() {
     assert(bd.confidence === 30 && bd.isWordPress === false,
       'core body classes alone stay under the threshold');
 
-    // Asset scan still reports the active theme when both are in the DOM,
-    // and the body-class fallback does not overwrite it.
-    const both = new JSDOM(`<html><head>
-      <link rel='stylesheet' href='/wp-content/themes/magazine-pro/style.css'>
-      </head><body class="wp-theme-genesis wp-child-theme-magazine-pro"></body></html>`);
-    const bothCtx = loadModules(both);
-    const bothD = bothCtx.WPDetect.detectWordPress(bothCtx.document);
-    assert(bothD.context.themeSlug === 'magazine-pro', 'asset-scan theme slug wins');
 
     // oEmbed discovery link: a detection signal only (#102). It proves the
     // page is WordPress and nothing else — no REST root, no install
