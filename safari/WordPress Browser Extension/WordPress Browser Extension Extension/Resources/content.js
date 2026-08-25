@@ -187,6 +187,19 @@
 
   // -- Popup messaging -----------------------------------------------------
 
+  // Does `resUrl` — a fetch's final URL, after redirects — still name the
+  // document `target` describes? Origin and pathname only; query and hash feed
+  // nothing in detection. Absent or unparseable counts as a mismatch.
+  function isSameDocumentResponse(resUrl, target) {
+    if (!resUrl) return false;
+    try {
+      const final = new URL(resUrl, target.href);
+      return final.origin === target.origin && final.pathname === target.pathname;
+    } catch (_) {
+      return false;
+    }
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg) return;
 
@@ -216,7 +229,12 @@
       // auth cookie return logged-in HTML here; ones that don't return the
       // same stale response, in which case the popup falls back to a reload
       // prompt.
-      fetch(location.href, {
+      //
+      // Capture the target once: the gate below and the values handed to
+      // detection must describe one document, and `location` can move under a
+      // pushState navigation mid-fetch.
+      const target = new URL(location.href);
+      fetch(target.href, {
         credentials: 'include',
         cache: 'no-store',
         headers: { 'Cache-Control': 'no-cache' },
@@ -224,16 +242,23 @@
       })
         .then(async (res) => {
           if (!res.ok) return sendResponse({ detection: null });
+          // A redirect can land this credentialed request on a document the
+          // page load never saw — a login wall, another install on the host,
+          // another origin. The popup keys what comes back to the captured tab,
+          // so parsing it would attribute another install's admin bar and base
+          // to this tab. Fail closed; the popup keeps what it rendered.
+          if (!isSameDocumentResponse(res.url, target)) {
+            return sendResponse({ detection: null });
+          }
           const html = await res.text();
           const doc = new DOMParser().parseFromString(html, 'text/html');
-          // Parsed via DOMParser → no defaultView. Pass the live origin and
-          // pathname explicitly: the origin so the +New same-origin filter
+          // Parsed via DOMParser → no defaultView. Pass the captured origin
+          // and pathname explicitly: the origin so the +New same-origin filter
           // can validate hrefs, the pathname so the wp-admin base fallback
-          // works (the fetch is of location.href, so both describe the
-          // parsed document).
+          // works (the gate above confirmed both describe this document).
           const det = globalThis.WPDetect.detectWordPress(doc, {
-            origin: location.origin,
-            pathname: location.pathname,
+            origin: target.origin,
+            pathname: target.pathname,
           });
           if (!det.context.isLoggedIn) {
             det.context.isLoggedIn =
