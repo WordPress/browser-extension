@@ -4,9 +4,10 @@ import { probePageState } from '../lib/pageProbe';
 
 // Poll the content script for live detection until it answers or a short
 // budget elapses. Content scripts inject at document_idle, so a popup opened
-// mid-load on a first visit can beat the content script and get no response.
-// The caller only reaches here when there's also no cached entry (a genuine
-// first visit), so without this a still-silent content script reads as a
+// mid-load can beat the content script and get no response. The caller
+// reaches here when the cache holds no POSITIVE entry — a genuine first
+// visit, or a stale negative recorded before a site's signals were restored
+// (#101) — so without this a still-silent content script reads as a
 // definitive "Not a WordPress site". ~1.2s ceiling (6 × 200ms); the content
 // script normally injects within a few hundred ms and answers authoritatively
 // (WordPress or not) as soon as it does.
@@ -73,13 +74,16 @@ export function useDetection() {
 					};
 				}
 
-				// No live answer and nothing cached: the background caches an entry
-				// for every origin it sees (WordPress or not), so a null cache means
-				// a genuine first visit. Combined with a silent content script, this
-				// is the one case where the page is still loading and a definitive
-				// "Not a WordPress site" would be a race, not a fact — poll briefly
-				// for the content script's real answer before concluding.
-				if (!result && !cached) {
+				// No live answer and no POSITIVE cache: poll briefly for the
+				// content script's real answer before concluding. A null cache
+				// means a genuine first visit (the background caches every origin
+				// it sees), and a negative cache may simply be stale — recorded
+				// while a site was hardened, before its signals were restored
+				// (#101). Either way a definitive "Not a WordPress site" from a
+				// silent content script would be a race or a memory, not a fact;
+				// the live answer is authoritative in both directions. A positive
+				// cache keeps the fast path: it synthesizes a result above.
+				if (!result && (!cached || !cached.isWordPress)) {
 					result = await probeLiveDetection(tab.id, () => cancelled);
 				}
 
