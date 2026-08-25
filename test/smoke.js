@@ -1655,8 +1655,10 @@ async function main() {
     const bothD = bothCtx.WPDetect.detectWordPress(bothCtx.document);
     assert(bothD.context.themeSlug === 'magazine-pro', 'asset-scan theme slug wins');
 
-    // oEmbed discovery link: confidence plus a REST root, including the
-    // subdirectory path the missing api.w.org link would have carried.
+    // oEmbed discovery link: a detection signal only (#102). It proves the
+    // page is WordPress and nothing else — no REST root, no install
+    // location. A page whose only discovery markup is the oEmbed link
+    // detects, but its context carries nothing to act on.
     const oembed = new JSDOM(`<html><head>
       <link rel="alternate" type="application/json+oembed"
         href="https://example.com/blog/wp-json/oembed/1.0/embed?url=https%3A%2F%2Fexample.com%2Fblog%2Fhello%2F">
@@ -1664,40 +1666,34 @@ async function main() {
     const octx = loadModules(oembed);
     const od = octx.WPDetect.detectWordPress(octx.document, { origin: 'https://example.com' });
     assert(od.isWordPress === true && od.signals.includes('oembed-link'), 'oEmbed link detects');
-    assert(od.context.restApiRoot === 'https://example.com/blog/wp-json/', 'REST root from oEmbed href');
-    assert(od.context.baseUrl === 'https://example.com/blog', 'subdirectory base from the oEmbed root');
+    assert(od.context.restApiRoot === null && od.context.baseUrlEvidence === null,
+      'and contributes no REST root and no install-location evidence');
+    assert(od.context.baseUrl === 'https://example.com',
+      'the base stays the bare-origin fallback');
 
-    // Plain permalinks put the route in the query string.
+    // Plain permalinks put the route in the query string; endpoint-exact
+    // either way, and lookalikes and off-origin links never count.
     const oembedPlain = new JSDOM(`<html><head>
       <link rel="alternate" type="application/json+oembed"
         href="https://example.com/?rest_route=%2Foembed%2F1.0%2Fembed&url=x">
       </head><body></body></html>`, { url: 'https://example.com/?p=1' });
     const opctx = loadModules(oembedPlain);
     const opd = opctx.WPDetect.detectWordPress(opctx.document, { origin: 'https://example.com' });
-    assert(opd.context.restApiRoot === 'https://example.com/?rest_route=/',
-      'plain-permalink REST root from oEmbed href');
-
-    // Cross-origin oEmbed links are ignored outright: the href feeds
-    // restApiRoot, which the popup issues authenticated REST calls against.
-    const foreign = new JSDOM(`<html><head>
-      <link rel="alternate" type="application/json+oembed"
-        href="https://evil.example/wp-json/oembed/1.0/embed?url=x">
-      </head><body></body></html>`, { url: 'https://example.com/' });
-    const fctx = loadModules(foreign);
-    const fd = fctx.WPDetect.detectWordPress(fctx.document, { origin: 'https://example.com' });
-    assert(!fd.signals.includes('oembed-link') && fd.context.restApiRoot === null,
-      'cross-origin oEmbed link is ignored');
-
-    // A real api.w.org link is authoritative — oEmbed never overwrites it.
-    const bothRoots = new JSDOM(`<html><head>
-      <link rel="https://api.w.org/" href="https://example.com/wp-json/">
-      <link rel="alternate" type="application/json+oembed"
-        href="https://example.com/other/wp-json/oembed/1.0/embed?url=x">
-      </head><body></body></html>`, { url: 'https://example.com/' });
-    const brctx = loadModules(bothRoots);
-    const brd = brctx.WPDetect.detectWordPress(brctx.document, { origin: 'https://example.com' });
-    assert(brd.context.restApiRoot === 'https://example.com/wp-json/',
-      'api.w.org root is not overwritten by oEmbed');
+    assert(opd.signals.includes('oembed-link') && opd.context.restApiRoot === null,
+      'plain-permalink oEmbed link counts as a signal only');
+    for (const href of [
+      'https://example.com/wp-json/oembed/1.0/embedder?url=x',
+      'https://example.com/?rest_route=/oembed/1.0/embed/evil&url=x',
+      'https://evil.example/wp-json/oembed/1.0/embed?url=x',
+    ]) {
+      const nd = new JSDOM('<html><head>'
+        + `<link rel="alternate" type="application/json+oembed" href="${href}">`
+        + '</head><body></body></html>', { url: 'https://example.com/' });
+      const nctx = loadModules(nd);
+      assert(!nctx.WPDetect.detectWordPress(nctx.document, { origin: 'https://example.com' })
+        .signals.includes('oembed-link'),
+        `a lookalike or off-origin oEmbed href never counts: ${href.slice(19, 62)}`);
+    }
 
     // Inline handle scripts — the -js-extra/-before/-after naming is WP-only.
     const inline = new JSDOM(`<html><head>
@@ -1726,6 +1722,22 @@ async function main() {
     assert(!sd.signals.includes('wp-enqueue-handles'), 'two handles do not credit the convention');
     assert(sd.isWordPress === false, 'static site with a `home` body class is not WordPress');
 
+    // And when the convention IS credited, its weight (15) plus the loose
+    // body-class signal (20) still sits under the 40 threshold: a static
+    // site with a `home` class and three coincidental handle-suffixed ids
+    // must not read as WordPress. No pair of weak signals is conclusive.
+    const staticSite3 = new JSDOM(`<html><head>
+      <link rel="stylesheet" id="main-css" href="/css/main.css">
+      <script src="/js/app.js" id="app-js"></script>
+      <script src="/js/vendor.js" id="vendor-js"></script>
+      </head><body class="home"><h1>A static site</h1></body></html>`,
+    { url: 'https://example.com/' });
+    const s3ctx = loadModules(staticSite3);
+    const s3d = s3ctx.WPDetect.detectWordPress(s3ctx.document);
+    assert(s3d.signals.includes('wp-enqueue-handles'), 'three handles of both kinds credit the signal');
+    assert(s3d.isWordPress === false && s3d.confidence === 35,
+      'the credited convention plus a bare body class stays under the threshold');
+
     // Both kinds are required: five scripts and no stylesheet is a bundler
     // output, not WP's loader, which stamps styles and scripts alike.
     const scriptsOnly = new JSDOM(`<html><head>
@@ -1746,6 +1758,88 @@ async function main() {
     const pctx = loadModules(preload);
     const pd = pctx.WPDetect.detectWordPress(pctx.document);
     assert(!pd.signals.includes('wp-enqueue-handles'), 'preloaded CSS is not a stylesheet handle');
+
+    // One class attribute is one piece of evidence: generic page-type names
+    // plus core wp-* names must not stack to a conclusive score on their
+    // own. The stronger core signal subsumes the generic one.
+    const classStack = new JSDOM(
+      '<html><body class="home wp-theme-demo"></body></html>',
+      { url: 'https://example.com/' },
+    );
+    const csctx = loadModules(classStack);
+    const csd = csctx.WPDetect.detectWordPress(csctx.document);
+    assert(csd.signals.includes('wp-core-body-class') && !csd.signals.includes('wp-body-classes'),
+      'core body classes subsume the generic body-class signal');
+    assert(csd.isWordPress === false && csd.confidence === 30,
+      'a home class plus one wp-theme-* class is not conclusive on its own');
+
+    // Same rule for assets: when the /wp-content/ path signal fires, the
+    // handle-id convention on those same nodes adds nothing — three
+    // handle-suffixed wp-content assets are one piece of evidence, not two.
+    const assetStack = new JSDOM(`<html><head>
+      <link rel="stylesheet" id="main-css" href="/wp-content/themes/x/style.css">
+      <script src="/wp-content/themes/x/app.js" id="app-js"></script>
+      <script src="/wp-content/plugins/y/vendor.js" id="vendor-js"></script>
+      </head><body></body></html>`, { url: 'https://example.com/' });
+    const asctx = loadModules(assetStack);
+    const asd = asctx.WPDetect.detectWordPress(asctx.document);
+    assert(asd.signals.includes('wp-asset-path') && !asd.signals.includes('wp-enqueue-handles'),
+      'the asset-path signal subsumes handle ids on the same nodes');
+    assert(asd.isWordPress === false && asd.confidence === 30,
+      'three handle-suffixed wp-content assets alone are not conclusive');
+
+    // Inline handle ids belong to inline scripts: WP prints -js-extra/-before/
+    // -after/-translations payloads without src. A src'd script wearing the
+    // suffix is not that.
+    const srcExtra = new JSDOM(`<html><head>
+      <script src="/vendor/thing.js" id="contact-form-js-extra"></script>
+      </head><body></body></html>`, { url: 'https://example.com/' });
+    const sectx = loadModules(srcExtra);
+    assert(!sectx.WPDetect.detectWordPress(sectx.document).signals.includes('wp-inline-script-handle'),
+      'a script with src wearing a -js-extra id is not an inline handle');
+    const emptySrc = new JSDOM(`<html><head>
+      <script src="" id="x-js-extra"></script>
+      </head><body class="home"></body></html>`, { url: 'https://example.com/' });
+    const esctx = loadModules(emptySrc);
+    const esd = esctx.WPDetect.detectWordPress(esctx.document);
+    assert(!esd.signals.includes('wp-inline-script-handle') && esd.isWordPress === false,
+      'an empty src attribute is still a src attribute, and home plus it stays under threshold');
+
+    // Comment evidence is the full shape: a form whose action path ends with
+    // /wp-comments-post.php, same-origin, CONTAINING comment_post_ID. Loose
+    // pieces prove nothing.
+    const looseInput = new JSDOM(
+      '<html><body><input type="hidden" name="comment_post_ID" value="9"></body></html>',
+      { url: 'https://example.com/' },
+    );
+    const lictx = loadModules(looseInput);
+    assert(!lictx.WPDetect.detectWordPress(lictx.document).signals.includes('wp-comment-form'),
+      'a stray comment_post_ID input outside the form proves nothing');
+    const bareForm = new JSDOM(
+      '<html><body><form action="https://example.com/wp-comments-post.php"></form></body></html>',
+      { url: 'https://example.com/' },
+    );
+    const bfctx = loadModules(bareForm);
+    assert(!bfctx.WPDetect.detectWordPress(bfctx.document).signals.includes('wp-comment-form'),
+      'a form with the action but no comment_post_ID field proves nothing');
+    const foreignForm = new JSDOM(
+      '<html><body><form action="https://evil.example/wp-comments-post.php">'
+      + '<input type="hidden" name="comment_post_ID" value="9"></form></body></html>',
+      { url: 'https://example.com/' },
+    );
+    const ffctx = loadModules(foreignForm);
+    assert(!ffctx.WPDetect.detectWordPress(ffctx.document, { origin: 'https://example.com' })
+      .signals.includes('wp-comment-form'),
+      'a cross-origin comment action proves nothing about this site');
+    const relativeForm = new JSDOM(
+      '<html><body><form action="wp-comments-post.php" method="post">'
+      + '<input type="hidden" name="comment_post_ID" value="9"></form></body></html>',
+      { url: 'https://example.com/2026/08/hello/' },
+    );
+    const rfctx = loadModules(relativeForm);
+    assert(rfctx.WPDetect.detectWordPress(rfctx.document, { origin: 'https://example.com' })
+      .signals.includes('wp-comment-form'),
+      'a relative same-origin comment action with the field counts');
 
     // A page that merely writes about WordPress — the strings appear in
     // text, not in the markup we key on.

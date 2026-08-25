@@ -155,16 +155,14 @@
     // Printed on singular views by wp_oembed_add_discovery_links(), a
     // different hook from the REST link above — which is why installs that
     // drop `rest_output_link_wp_head` usually still emit this one (#101).
-    // Its href carries the same REST root, so it also recovers the install
-    // base on subdirectory installs.
+    // A detection signal ONLY: the href is endpoint-validated so lookalikes
+    // and other systems' oEmbed links never count, but nothing about where
+    // the install lives is derived from it — install-location evidence
+    // stays with the REST link and the admin pathname (#104).
     const oembedLink = doc.querySelector('link[type="application/json+oembed"][href]');
-    if (oembedLink) {
-      const oembedRoot = restRootFromOembedHref(oembedLink.href, docOrigin);
-      if (oembedRoot) {
-        result.signals.push('oembed-link');
-        result.confidence += 40;
-        if (!result.context.restApiRoot) result.context.restApiRoot = oembedRoot;
-      }
+    if (oembedLink && isWordPressOembedHref(oembedLink.href, docOrigin)) {
+      result.signals.push('oembed-link');
+      result.confidence += 40;
     }
 
     // The pathname fallback applies only to documents that are positively
@@ -208,26 +206,44 @@
     if (assetScan.themeSlug) result.context.themeSlug = assetScan.themeSlug;
     if (assetScan.pluginSlugs.length) result.context.pluginSlugs = assetScan.pluginSlugs;
 
-    // --- Medium signal: enqueued-asset handle ids ---
+    // --- Weak signal: enqueued-asset handle ids ---
     // WP_Scripts/WP_Styles stamp every enqueued asset with `id="<handle>-css"`
     // or `id="<handle>-js"`. Taken alone the suffix is a convention anyone
     // could copy, so credit it only in its full shape: both kinds present and
     // at least three assets carrying it. Survives renamed wp-content and
-    // CDN-rewritten asset URLs, which the path scan above does not.
-    if (assetScan.cssHandles > 0 && assetScan.jsHandles > 0
+    // CDN-rewritten asset URLs, which the path scan above does not. Weighted
+    // at 15 so that even paired with the loose wp-body-classes signal (+20,
+    // triggered by names like `home` that any site can use) the total stays
+    // under the 40 threshold: no pair of weak signals is conclusive.
+    // Skipped entirely when the /wp-content/ path signal already fired:
+    // the same asset nodes are one piece of evidence, not two, and this
+    // convention exists precisely for installs whose asset paths are
+    // renamed or CDN-rewritten.
+    if (!assetScan.hasWpPath
+        && assetScan.cssHandles > 0 && assetScan.jsHandles > 0
         && assetScan.cssHandles + assetScan.jsHandles >= 3) {
       result.signals.push('wp-enqueue-handles');
-      result.confidence += 20;
+      result.confidence += 15;
     }
 
     // --- Strong signal: inline script handle ids ---
     // wp_localize_script()/wp_add_inline_script() emit their payload in a
     // sibling <script> whose id suffixes the handle. Nothing outside WP
     // produces this naming, so one match is enough.
-    if (doc.querySelector(
-      'script[id$="-js-extra"], script[id$="-js-before"],' +
-      ' script[id$="-js-after"], script[id$="-js-translations"]',
-    )) {
+    // One pass over document.scripts: measurably cheaper than four
+    // attribute-suffix selectors over the whole document, and the shape is
+    // clearer — an id with the handle suffix on a script with no src.
+    let hasInlineHandle = false;
+    for (const inlineScript of doc.scripts) {
+      // hasAttribute, not a truthiness check: src="" is still a src'd
+      // script, exactly as the :not([src]) selector semantics had it.
+      if (!inlineScript.hasAttribute('src')
+          && /-js-(extra|before|after|translations)$/.test(inlineScript.id || '')) {
+        hasInlineHandle = true;
+        break;
+      }
+    }
+    if (hasInlineHandle) {
       result.signals.push('wp-inline-script-handle');
       result.confidence += 30;
     }
@@ -235,10 +251,26 @@
     // --- Strong signal: comment form ---
     // comment_form() posts to wp-comments-post.php and prints the hidden
     // comment_post_ID field. Present on singular views regardless of login
-    // state, and untouched by the usual "hide that this is WordPress" advice.
-    if (doc.querySelector(
-      'form[action*="/wp-comments-post.php"], input[name="comment_post_ID"]',
-    )) {
+    // state, and untouched by the usual "hide that this is WordPress"
+    // advice. Credited only in its full shape: a same-origin form whose
+    // action path ends with the segment-exact handler AND containing the
+    // field. A stray input or a bare action proves nothing, and a
+    // cross-origin action says nothing about this site.
+    let hasCommentForm = false;
+    for (const form of doc.querySelectorAll('form[action]')) {
+      if (!form.querySelector('input[name="comment_post_ID"]')) continue;
+      try {
+        const action = new URL(form.getAttribute('action'),
+          form.baseURI || (docOrigin && docOrigin !== 'null' ? docOrigin : undefined));
+        if (action.protocol !== 'http:' && action.protocol !== 'https:') continue;
+        if (docOrigin && docOrigin !== 'null' && action.origin !== docOrigin) continue;
+        if (action.pathname.replace(/\/+$/, '').endsWith('/wp-comments-post.php')) {
+          hasCommentForm = true;
+          break;
+        }
+      } catch (_) { /* unresolvable action — not evidence */ }
+    }
+    if (hasCommentForm) {
       result.signals.push('wp-comment-form');
       result.confidence += 30;
     }
@@ -503,34 +535,23 @@
   }
 
   /**
-   * REST API root from an oEmbed discovery href, or null when the href isn't
-   * a same-origin WordPress oEmbed route. Two URL shapes, mirroring the two
-   * permalink modes deriveBaseUrl already handles:
-   *   - Pretty: https://example.com/wp-json/oembed/1.0/embed?url=…
-   *   - Plain:  https://example.com/?rest_route=/oembed/1.0/embed&url=…
-   * Same-origin is enforced because the href comes from page DOM and feeds
-   * context.restApiRoot, which the popup later issues REST calls against.
+   * Is this discovery href WordPress's own oEmbed endpoint on this origin?
+   * Pretty and index permalinks put the route in the path; plain permalinks
+   * put it in the rest_route query. Endpoint-exact so lookalike endpoints
+   * and other systems' oEmbed links never count, and same-origin because a
+   * page's link to someone else's endpoint says nothing about this site.
+   * A signal gate only — nothing is derived from the href.
    */
-  function restRootFromOembedHref(href, origin) {
+  function isWordPressOembedHref(href, origin) {
     try {
       const u = new URL(href, origin || undefined);
-      if (u.protocol !== 'http:' && u.protocol !== 'https:') return null;
-      if (origin && origin !== 'null' && u.origin !== origin) return null;
-
+      if (u.protocol !== 'http:' && u.protocol !== 'https:') return false;
+      if (origin && origin !== 'null' && u.origin !== origin) return false;
       const route = u.searchParams.get('rest_route');
-      if (route) {
-        if (!/^\/oembed\/1\.0\/embed(\/|$)/.test(route)) return null;
-        return `${u.origin}${u.pathname}?rest_route=/`;
-      }
-
-      // Everything up to and including the slash before the route is the
-      // REST root — "/wp-json/" at the root, "/sub/wp-json/" on a
-      // subdirectory install.
-      const i = u.pathname.indexOf('/oembed/1.0/embed');
-      if (i === -1) return null;
-      return `${u.origin}${u.pathname.slice(0, i + 1)}`;
+      if (route !== null) return /^\/oembed\/1\.0\/embed\/?$/.test(route);
+      return /\/oembed\/1\.0\/embed\/?$/.test(u.pathname);
     } catch (_) {
-      return null;
+      return false;
     }
   }
 
@@ -741,13 +762,15 @@
       }
     }
 
-    if (sawWpClass) {
-      result.signals.push('wp-body-classes');
-      result.confidence += 20;
-    }
+    // One class attribute is one piece of evidence: score the strongest
+    // tier only. The core wp-* names (printed by nothing but WordPress)
+    // subsume the generic page-type names any site can use.
     if (sawCoreWpClass) {
       result.signals.push('wp-core-body-class');
       result.confidence += 30;
+    } else if (sawWpClass) {
+      result.signals.push('wp-body-classes');
+      result.confidence += 20;
     }
 
     // body_class() prints the parent as wp-theme-<template> and, on a child

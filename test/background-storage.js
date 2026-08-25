@@ -747,6 +747,35 @@ async function main() {
       const literalWpJson = await pipeline(`${HOST}/wp-json/wp-json`);
       assert(!!literalWpJson[`${HOST}/wp-json`] && Object.keys(literalWpJson).length === 1,
         'pipeline: an install literally based at /wp-json still records its own row');
+
+    }
+    {
+      // #102: the oEmbed link is a detection signal only. A logged-in page
+      // whose only discovery markup is the oEmbed link detects as WordPress
+      // but carries no install-location evidence, so it must not mutate My
+      // Sites — recording stays with the REST link and the admin pathname
+      // (#104).
+      const { JSDOM } = require('jsdom');
+      const oembedDetect = {};
+      new Function('globalThis', read('lib', 'detect.js'))(oembedDetect);
+      const storage = makeStorage({});
+      const { send } = loadBackground(storage);
+      const dom = new JSDOM('<html><head>'
+        + `<link rel="alternate" type="application/json+oembed" href="${HOST}/wp-json/oembed/1.0/embed?url=x">`
+        + '</head><body class="single logged-in admin-bar">'
+        + '<div id="wpadminbar"></div></body></html>');
+      const detection = oembedDetect.WPDetect.detectWordPress(dom.window.document, {
+        origin: HOST, pathname: '/hello-world/',
+      });
+      assert(detection.isWordPress === true && detection.signals.includes('oembed-link'),
+        'an oEmbed-only page detects as WordPress');
+      assert(detection.context.restApiRoot === null && detection.context.baseUrlEvidence === null,
+        'and carries no REST root and no install-location evidence');
+      await send({ type: 'WP_DETECTION', detection, hostFromDOM: 'selfhosted' },
+        { url: `${HOST}/hello-world/`, origin: HOST, tab: { id: 7, url: `${HOST}/hello-world/` } });
+      await settle();
+      assert(Object.keys(storage.read(MY_SITES_KEY) || {}).length === 0,
+        'a logged-in oEmbed-only page cannot mutate My Sites');
     }
     {
       // v1.0.1 ambiguity, end to end: a subdirectory install seen only via
