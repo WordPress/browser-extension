@@ -300,7 +300,13 @@ async function main() {
     // for the duration, restoring both after.
     const savedFetch = globalThis.fetch;
     const savedParser = globalThis.DOMParser;
-    globalThis.fetch = async () => ({ ok: true, text: async () => ADMIN_PAGE });
+    // `url` is the fetch's final (post-redirect) response URL; the handler
+    // refuses to parse a response that doesn't attest to the requested one.
+    globalThis.fetch = async () => ({
+      ok: true,
+      url: `https://example.com${ADMIN_PATH}`,
+      text: async () => ADMIN_PAGE,
+    });
     globalThis.DOMParser = page.ctx.DOMParser;
     try {
       const fresh = await new Promise((resolve) => {
@@ -318,6 +324,93 @@ async function main() {
       globalThis.fetch = savedFetch;
       globalThis.DOMParser = savedParser;
     }
+  }
+
+  // --- 45. GET_FRESH_DETECTION refuses redirected responses --------------
+  {
+    console.log('\n[45] fresh fetch is gated on the final response URL (#109)');
+    const PAGE_PATH = '/blog/hello-world/';
+    const PAGE_URL = `https://example.com${PAGE_PATH}`;
+
+    // Drives one GET_FRESH_DETECTION round trip against a fetch stub that
+    // reports `responseUrl` as its final URL. `beforeResolve` runs while the
+    // fetch is still in flight, so a test can move `location` under it.
+    async function freshFetch(responseUrl, { html = WP_LOGGED_IN_PAGE, beforeResolve, pageUrl = PAGE_URL } = {}) {
+      const page = makePage(html, { url: pageUrl });
+      page.runContent();
+      await settle();
+
+      const requested = [];
+      const savedFetch = globalThis.fetch;
+      const savedParser = globalThis.DOMParser;
+      globalThis.fetch = async (input) => {
+        requested.push(String(input));
+        if (beforeResolve) beforeResolve(page);
+        const res = { ok: true, text: async () => html };
+        // No URL reported is the property missing, not ''.
+        if (responseUrl !== undefined) res.url = responseUrl;
+        return res;
+      };
+      globalThis.DOMParser = page.ctx.DOMParser;
+      try {
+        const resp = await new Promise((resolve) => {
+          for (const fn of page.listeners) fn({ type: 'GET_FRESH_DETECTION' }, {}, resolve);
+        });
+        return { resp, requested };
+      } finally {
+        globalThis.fetch = savedFetch;
+        globalThis.DOMParser = savedParser;
+      }
+    }
+
+    const same = await freshFetch(PAGE_URL);
+    assert(same.requested[0] === PAGE_URL, 'fetches the page it captured');
+    assert(!!same.resp.detection && same.resp.detection.isWordPress,
+      'an unredirected response is parsed');
+
+    // The login wall a stale session lands on: WordPress markup, so without
+    // the gate its admin bar merges straight into this tab's resolution.
+    const login = await freshFetch('https://example.com/wp-login.php');
+    assert(login.resp.detection === null,
+      'a same-origin redirect to another document is refused');
+
+    const offsite = await freshFetch('https://cdn.example.net/blog/hello-world/');
+    assert(offsite.resp.detection === null, 'a cross-origin redirect is refused');
+
+    const unattested = await freshFetch(undefined);
+    assert(unattested.resp.detection === null,
+      'a response with no URL is refused');
+    const empty = await freshFetch('');
+    assert(empty.resp.detection === null, 'an empty response URL is refused');
+
+    // On plain permalinks the query SELECTS the document: ?p=1 and ?p=2 are
+    // different posts, so a response whose query differs is another page and
+    // is refused. Only the fragment sits outside a document's identity.
+    const otherPost = await freshFetch('https://example.com/index.php?p=2', {
+      pageUrl: 'https://example.com/index.php?p=1',
+    });
+    assert(otherPost.resp.detection === null,
+      'a redirect to a different document-selecting query is refused');
+    const fragment = await freshFetch(`${PAGE_URL}#comments`);
+    assert(!!fragment.resp.detection && fragment.resp.detection.isWordPress,
+      'a fragment-only difference is still the same document');
+
+    // A pushState mid-flight must not retarget the gate or detection's input.
+    const seen = [];
+    const moved = await freshFetch(PAGE_URL, {
+      beforeResolve: (page) => {
+        const orig = page.ctx.WPDetect.detectWordPress;
+        page.ctx.WPDetect.detectWordPress = (doc, opts) => {
+          seen.push(opts || {});
+          return orig(doc, opts);
+        };
+        page.ctx.history.pushState({}, '', '/blog/second-post/');
+      },
+    });
+    assert(!!moved.resp.detection && moved.resp.detection.isWordPress,
+      'a same-document navigation mid-flight does not invalidate the response');
+    assert(seen.length === 1 && seen[0].pathname === PAGE_PATH,
+      'detection still receives the pathname captured at request time');
   }
 
   console.log(`\n${failures === 0 ? 'Content lifecycle tests passed.' : failures + ' failure(s).'}`);
