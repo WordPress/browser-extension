@@ -964,6 +964,44 @@ async function main() {
       derive('https://example.com', 'https://example.com/?rest_route=/')
         === 'https://example.com',
       'root install, plain permalinks → bare origin');
+    // Front-controller REST roots (#107): index.php dispatches AT the install
+    // base, so it is never part of it — left in, admin links point at
+    // <base>/index.php/wp-admin/ and My Sites keys a row there.
+    assert(
+      derive('https://example.com', 'https://example.com/index.php/wp-json/')
+        === 'https://example.com',
+      'index permalinks, root: /index.php/wp-json/ → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/index.php/wp-json')
+        === 'https://example.com',
+      'index permalinks, root, slashless: /index.php/wp-json → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/wordpress/index.php/wp-json/')
+        === 'https://example.com/wordpress',
+      'index permalinks, subdirectory: /wordpress/index.php/wp-json/ → /wordpress');
+    assert(
+      derive('https://example.com', 'https://example.com/index.php?rest_route=/')
+        === 'https://example.com',
+      'plain permalinks through the front controller: /index.php?rest_route=/ → bare origin');
+    assert(
+      derive('https://example.com', 'https://example.com/wordpress/index.php?rest_route=/')
+        === 'https://example.com/wordpress',
+      'front controller under a subdirectory: /wordpress/index.php?rest_route=/ → /wordpress');
+    assert(
+      derive('https://example.com', 'https://example.com/%69ndex.php/wp-json/')
+        === 'https://example.com',
+      'encoded front controller decodes before the check: /%69ndex.php/wp-json/ → bare origin');
+    // The tradeoff: a root install on index permalinks and an install inside
+    // a directory named index.php print the same root, and only one can win.
+    assert(
+      derive('https://example.com', 'https://example.com/index.php/index.php/wp-json/')
+        === 'https://example.com/index.php',
+      'an install genuinely based at /index.php derives from /index.php/index.php/wp-json/');
+    // An unrecognized root shape keeps its path — no guessing.
+    assert(
+      derive('https://example.com', 'https://example.com/index.php')
+        === 'https://example.com/index.php',
+      'a REST root with no recognizable route shape keeps its path verbatim');
     assert(
       derive('https://example.com', 'https://attacker.example/wp-json/')
         === 'https://example.com',
@@ -1543,6 +1581,14 @@ async function main() {
     assert(derive(ORIGIN, `${ORIGIN}/wordpress/wp-json/`, null).evidence === 'rest'
       && derive(ORIGIN, null, '/wordpress/wp-admin/').evidence === 'admin-path',
       'subdirectory bases report their provenance the same way');
+
+    // Front-controller roots (#107) confirm the root install, where before
+    // they confirmed <origin>/index.php.
+    const frontRoot = derive(ORIGIN, `${ORIGIN}/index.php/wp-json/`, null);
+    const frontPlain = derive(ORIGIN, `${ORIGIN}/index.php?rest_route=/`, null);
+    assert(frontRoot.baseUrl === ORIGIN && frontRoot.evidence === 'rest'
+      && frontPlain.baseUrl === ORIGIN && frontPlain.evidence === 'rest',
+      'front-controller REST roots confirm the root install, not an /index.php base');
 
     // Values that prove nothing must not claim evidence, or the background's
     // My Sites gate would accept a forged root.
