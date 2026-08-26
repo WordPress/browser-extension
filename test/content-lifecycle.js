@@ -335,8 +335,8 @@ async function main() {
     // Drives one GET_FRESH_DETECTION round trip against a fetch stub that
     // reports `responseUrl` as its final URL. `beforeResolve` runs while the
     // fetch is still in flight, so a test can move `location` under it.
-    async function freshFetch(responseUrl, { html = WP_LOGGED_IN_PAGE, beforeResolve } = {}) {
-      const page = makePage(html, { url: PAGE_URL });
+    async function freshFetch(responseUrl, { html = WP_LOGGED_IN_PAGE, beforeResolve, pageUrl = PAGE_URL } = {}) {
+      const page = makePage(html, { url: pageUrl });
       page.runContent();
       await settle();
 
@@ -383,10 +383,17 @@ async function main() {
     const empty = await freshFetch('');
     assert(empty.resp.detection === null, 'an empty response URL is refused');
 
-    // Query and hash aren't part of the document's identity.
-    const requery = await freshFetch(`${PAGE_URL}?utm_source=`);
-    assert(!!requery.resp.detection && requery.resp.detection.isWordPress,
-      'a redirect differing only in query string is parsed');
+    // On plain permalinks the query SELECTS the document: ?p=1 and ?p=2 are
+    // different posts, so a response whose query differs is another page and
+    // is refused. Only the fragment sits outside a document's identity.
+    const otherPost = await freshFetch('https://example.com/index.php?p=2', {
+      pageUrl: 'https://example.com/index.php?p=1',
+    });
+    assert(otherPost.resp.detection === null,
+      'a redirect to a different document-selecting query is refused');
+    const fragment = await freshFetch(`${PAGE_URL}#comments`);
+    assert(!!fragment.resp.detection && fragment.resp.detection.isWordPress,
+      'a fragment-only difference is still the same document');
 
     // A pushState mid-flight must not retarget the gate or detection's input.
     const seen = [];

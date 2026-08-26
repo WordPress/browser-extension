@@ -188,13 +188,17 @@
   // -- Popup messaging -----------------------------------------------------
 
   // Does `resUrl` — a fetch's final URL, after redirects — still name the
-  // document `target` describes? Origin and pathname only; query and hash feed
-  // nothing in detection. Absent or unparseable counts as a mismatch.
+  // document `target` describes? Origin, pathname, AND query must all match:
+  // on plain permalinks the query selects the document (?p=1 and ?p=2 are
+  // different posts). Only the fragment sits outside a document's identity.
+  // Absent or unparseable counts as a mismatch.
   function isSameDocumentResponse(resUrl, target) {
     if (!resUrl) return false;
     try {
       const final = new URL(resUrl, target.href);
-      return final.origin === target.origin && final.pathname === target.pathname;
+      return final.origin === target.origin
+        && final.pathname === target.pathname
+        && final.search === target.search;
     } catch (_) {
       return false;
     }
