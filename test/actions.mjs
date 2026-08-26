@@ -572,5 +572,233 @@ console.log('\n[46] useDetection orchestration: probe confirmation gates the pus
 		'the popup still renders from captured data when the probe fails');
 }
 
+console.log('\n[47] a stale negative cache does not shortcut the live poll (#101)');
+{
+	// The #101 operational shape: an origin cached as not-WordPress while it
+	// was hardened; the signals came back, but at popup-open the content
+	// script is not answering yet (slow inject, or orphaned by an update and
+	// the tab since reloaded mid-resolve). The popup must poll for the live
+	// answer instead of trusting the stale negative — the content script is
+	// authoritative in both directions.
+	const hookSrc = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'hooks', 'useDetection.js'),
+		'utf8',
+	).replace(/^import .*$/gm, '').replace(/^export /gm, '');
+	const detectSrc47 = readFileSync(join(__dirname, '..', 'lib', 'detect.js'), 'utf8');
+	const libCtx47 = {};
+	new Function('globalThis', detectSrc47)(libCtx47);
+	const adminBaseSrc47 = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'adminBase.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+	const helpers47 = new Function(
+		'window',
+		`${adminBaseSrc47}\nreturn { reconcileProbeBase, probeMatchesTab };`,
+	)({ WPDetect: libCtx47.WPDetect });
+	const probeSrc47 = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'pageProbe.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+
+	const TAB = 'https://www.example.com/';
+	const dom = new JSDOM('<html><head></head><body class="home"></body></html>', { url: TAB });
+	const probePageState = new Function(
+		'document', 'location', `${probeSrc47}\nreturn probePageState;`,
+	)(dom.window.document, dom.window.location);
+
+	let liveCalls = 0;
+	const states = [];
+	const pushes = [];
+	const liveAnswer = {
+		url: TAB,
+		origin: 'https://www.example.com',
+		pathname: '/',
+		detection: {
+			isWordPress: true,
+			confidence: 60,
+			signals: ['rest-api-link'],
+			context: {
+				isLoggedIn: false, baseUrl: 'https://www.example.com',
+				baseUrlEvidence: null, restApiRoot: 'https://www.example.com/wp-json/',
+			},
+		},
+	};
+	const chrome = {
+		tabs: {
+			query: async () => [{ id: 7, url: TAB }],
+			sendMessage: async (id, msg) => {
+				if (msg.type === 'GET_LIVE_DETECTION') {
+					liveCalls++;
+					if (liveCalls < 3) throw new Error('content script not ready');
+					return liveAnswer;
+				}
+				return null;
+			},
+		},
+		runtime: {
+			sendMessage: async (msg) => {
+				if (msg.type === 'GET_CACHED_DETECTION') {
+					// The stale negative, cached while the site was hardened.
+					return { isWordPress: false, confidence: 0, signals: [], host: null };
+				}
+				pushes.push(msg);
+			},
+		},
+		scripting: {
+			executeScript: async ({ func }) => {
+				const res = await new Function(
+					'document', 'location', `return (${func})();`,
+				)(dom.window.document, dom.window.location);
+				return [{ result: res }];
+			},
+		},
+		cookies: { getAll: async () => [] },
+	};
+	const useState = (init) => [init, (s) => states.push(s)];
+	const useEffect = (fn) => { fn(); };
+	const useDetection = new Function(
+		'chrome', 'useState', 'useEffect',
+		'reconcileProbeBase', 'probeMatchesTab', 'probePageState', 'console',
+		`${hookSrc}\nreturn useDetection;`,
+	)(
+		chrome, useState, useEffect,
+		helpers47.reconcileProbeBase, helpers47.probeMatchesTab, probePageState,
+		{ error: () => {} },
+	);
+	// Test harness: the evaluated hook runs against the stubbed
+	// useState/useEffect above, entirely outside React, so the rule's
+	// component-context requirement cannot apply to this call.
+	// eslint-disable-next-line react-hooks/rules-of-hooks
+	useDetection();
+	for (let i = 0; i < 40 && !states.length; i++) {
+		await new Promise((resolve) => setTimeout(resolve, 100));
+	}
+	await new Promise((resolve) => setTimeout(resolve, 50));
+
+	assert(liveCalls >= 3,
+		'a failed first ask with only a negative cache polls the content script');
+	assert(states.some((s) => s.status === 'detected'),
+		'the late live answer resolves the popup to detected');
+	assert(!states.some((s) => s.status === 'not-wordpress'),
+		'the stale negative is never presented as the answer');
+}
+
+console.log('\n[48] the poll change stays bounded and scoped');
+{
+	// Guards pinning what the #101 poll change must NOT alter: a live
+	// negative answer concludes immediately, unsupported schemes never
+	// message at all, and a fully silent content script costs exactly the
+	// bounded poll budget before the stale negative is trusted.
+	const hookSrc = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'hooks', 'useDetection.js'),
+		'utf8',
+	).replace(/^import .*$/gm, '').replace(/^export /gm, '');
+	const detectSrc48 = readFileSync(join(__dirname, '..', 'lib', 'detect.js'), 'utf8');
+	const libCtx48 = {};
+	new Function('globalThis', detectSrc48)(libCtx48);
+	const adminBaseSrc48 = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'adminBase.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+	const helpers48 = new Function(
+		'window',
+		`${adminBaseSrc48}\nreturn { reconcileProbeBase, probeMatchesTab };`,
+	)({ WPDetect: libCtx48.WPDetect });
+	const probeSrc48 = readFileSync(
+		join(__dirname, '..', 'src', 'popup', 'lib', 'pageProbe.js'),
+		'utf8',
+	).replace(/^export /gm, '');
+
+	const run = async ({ tabUrl, liveBehavior, cached }) => {
+		const dom = new JSDOM('<html><body class="home"></body></html>',
+			{ url: tabUrl.startsWith('http') ? tabUrl : 'https://www.example.com/' });
+		const probePageState = new Function(
+			'document', 'location', `${probeSrc48}\nreturn probePageState;`,
+		)(dom.window.document, dom.window.location);
+		const counts = { live: 0, runtime: 0 };
+		const states = [];
+		const chrome = {
+			tabs: {
+				query: async () => [{ id: 7, url: tabUrl }],
+				sendMessage: async (id, msg) => {
+					if (msg.type === 'GET_LIVE_DETECTION') {
+						counts.live++;
+						return liveBehavior();
+					}
+					return null;
+				},
+			},
+			runtime: {
+				sendMessage: async (msg) => {
+					counts.runtime++;
+					if (msg.type === 'GET_CACHED_DETECTION') return cached;
+					return undefined;
+				},
+			},
+			scripting: {
+				executeScript: async ({ func }) => {
+					const res = await new Function(
+						'document', 'location', `return (${func})();`,
+					)(dom.window.document, dom.window.location);
+					return [{ result: res }];
+				},
+			},
+			cookies: { getAll: async () => [] },
+		};
+		const useState = (init) => [init, (s) => states.push(s)];
+		const useEffect = (fn) => { fn(); };
+		const useDetection = new Function(
+			'chrome', 'useState', 'useEffect',
+			'reconcileProbeBase', 'probeMatchesTab', 'probePageState', 'console',
+			`${hookSrc}\nreturn useDetection;`,
+		)(
+			chrome, useState, useEffect,
+			helpers48.reconcileProbeBase, helpers48.probeMatchesTab, probePageState,
+			{ error: () => {} },
+		);
+		// Test harness: stubbed react, outside any component.
+		// eslint-disable-next-line react-hooks/rules-of-hooks
+		useDetection();
+		for (let i = 0; i < 30 && !states.length; i++) {
+			await new Promise((resolve) => setTimeout(resolve, 100));
+		}
+		return { counts, states };
+	};
+
+	// A live NEGATIVE answer is authoritative: no polling, immediate answer.
+	const liveNeg = await run({
+		tabUrl: 'https://www.example.com/',
+		cached: { isWordPress: false, confidence: 0, signals: [], host: null },
+		liveBehavior: () => ({
+			url: 'https://www.example.com/', origin: 'https://www.example.com', pathname: '/',
+			detection: { isWordPress: false, confidence: 0, signals: [], context: {} },
+		}),
+	});
+	assert(liveNeg.counts.live === 1 && liveNeg.states.some((s) => s.status === 'not-wordpress'),
+		'a live negative answer concludes on the first ask, no polling');
+
+	// Unsupported schemes short-circuit before any messaging.
+	for (const tabUrl of ['chrome-extension://abcdefg/popup.html', 'file:///Users/x/page.html']) {
+		const unsupported = await run({
+			tabUrl, cached: null, liveBehavior: () => { throw new Error('unreachable'); },
+		});
+		assert(unsupported.counts.live === 0 && unsupported.counts.runtime === 0
+			&& unsupported.states.some((s) => s.status === 'unsupported'),
+			`${new URL(tabUrl).protocol} tabs resolve unsupported without messaging`);
+	}
+
+	// A silent content script costs exactly the bounded budget (one initial
+	// ask plus six poll attempts), then the stale negative stands.
+	const silent = await run({
+		tabUrl: 'https://www.example.com/',
+		cached: { isWordPress: false, confidence: 0, signals: [], host: null },
+		liveBehavior: () => { throw new Error('never answers'); },
+	});
+	assert(silent.counts.live === 7,
+		'a silent content script gets one ask plus six bounded poll attempts');
+	assert(silent.states.some((s) => s.status === 'not-wordpress'),
+		'after the bounded poll the stale negative is presented');
+}
+
 console.log(`\n${failures === 0 ? 'Popup action tests passed.' : failures + ' failure(s).'}`);
 process.exit(failures === 0 ? 0 : 1);
