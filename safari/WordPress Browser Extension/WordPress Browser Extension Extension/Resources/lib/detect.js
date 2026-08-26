@@ -519,12 +519,27 @@
       // base (without this, a slashless root link would mint a bogus
       // <origin>/wp-json base). Decoded first: %77p-json IS wp-json, and the
       // storage layer canonicalizes it that way, so an encoded link must not
-      // smuggle the route past this check into a stored /wp-json base. Plain
-      // permalinks keep the route in the query string, so the path already
-      // is the base.
+      // smuggle the route past this check into a stored /wp-json base.
       let path = decodeUnreservedPercent(rootUrl.pathname).replace(/\/+$/, '');
+      // Only a link that proved itself a route — terminal /wp-json, or a
+      // rest_route query — may give up a trailing segment below; an
+      // unrecognized (filtered, hardened) root keeps its path verbatim
+      // rather than guessing where the route starts.
+      let restShaped = false;
       if (path.endsWith('/wp-json')) {
         path = path.slice(0, -'/wp-json'.length).replace(/\/+$/, '');
+        restShaped = true;
+      } else if (rootUrl.searchParams.has('rest_route')) {
+        restShaped = true;
+      }
+      // rest_url() can print the root through the front controller
+      // (/index.php/wp-json/ on index permalinks, /index.php?rest_route=/ on
+      // plain ones): index.php dispatches AT the base, so leaving it in keys
+      // My Sites at <origin>/index.php and sends every link through it.
+      // Ambiguity decided here: an install in a directory literally named
+      // index.php prints the same root, and loses to the common case.
+      if (restShaped && path.endsWith('/index.php')) {
+        path = path.slice(0, -'/index.php'.length).replace(/\/+$/, '');
       }
       return {
         baseUrl: path ? `${rootUrl.origin}${path}` : rootUrl.origin,
