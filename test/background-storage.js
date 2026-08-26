@@ -748,6 +748,21 @@ async function main() {
       assert(!!literalWpJson[`${HOST}/wp-json`] && Object.keys(literalWpJson).length === 1,
         'pipeline: an install literally based at /wp-json still records its own row');
 
+      // Front-controller REST roots (#107), real pipeline: these used to key
+      // a row at <base>/index.php, with admin links through the dispatcher.
+      for (const shape of ['/index.php/wp-json/', '/index.php/wp-json', '/index.php?rest_route=/']) {
+        const store = await pipeline(HOST + shape);
+        const keys = Object.keys(store);
+        assert(!!store[HOST] && keys.length === 1,
+          `pipeline: root ${shape} records the origin`);
+        assert(keys.every((k) => !k.endsWith('/index.php')),
+          `pipeline: root ${shape} mints no /index.php-suffixed key`);
+      }
+      for (const shape of ['/index.php/wp-json/', '/index.php?rest_route=/']) {
+        const store = await pipeline(SA + shape);
+        assert(!!store[SA] && Object.keys(store).length === 1,
+          `pipeline: subdirectory /siteA${shape} records the /siteA install`);
+      }
     }
     {
       // #102: the oEmbed link is a detection signal only. A logged-in page
