@@ -72,6 +72,8 @@ function MySiteRow({ site, label, defaultLabel, editing, onRemove, onRename }) {
 	const { origin, key } = site;
 	const baseUrl = site.baseUrl || origin;
 	const iconUrl = site.iconUrl || null;
+	const defaultFavicon = origin ? `${origin}/favicon.ico` : null;
+	const [activeIcon, setActiveIcon] = useState(iconUrl || defaultFavicon);
 	const [iconFailed, setIconFailed] = useState(false);
 	let host = origin;
 	try {
@@ -83,22 +85,30 @@ function MySiteRow({ site, label, defaultLabel, editing, onRemove, onRename }) {
 	// placeholder must tell two installs on one host apart (#94).
 	const siteHint = defaultLabel ? defaultLabel(site) : host;
 
+	const handleIconError = () => {
+		if (activeIcon && defaultFavicon && activeIcon !== defaultFavicon) {
+			setActiveIcon(defaultFavicon);
+		} else {
+			setIconFailed(true);
+		}
+	};
+
 	const visit = (event) =>
 		runAction('visit-site', { origin, baseUrl, url: '', newTab: isNewTabIntent(event) });
 	const admin = (event) =>
 		runAction('admin', { origin, baseUrl, url: '', newTab: isNewTabIntent(event) });
 
-	// Shared leading favicon (site icon, globe fallback) — identical in both
-	// view and edit modes so the row geometry doesn't shift on toggle.
+	// Shared leading favicon (site icon, plain favicon, globe fallback) — identical
+	// in both view and edit modes so the row geometry doesn't shift on toggle.
 	const favicon = (
 		<span className="wpd-card__icon" aria-hidden="true">
-			{iconUrl && !iconFailed ? (
+			{activeIcon && !iconFailed ? (
 				<img
 					className="wpd-mysites__favicon"
-					src={iconUrl}
+					src={activeIcon}
 					alt=""
 					referrerPolicy="no-referrer"
-					onError={() => setIconFailed(true)}
+					onError={handleIconError}
 				/>
 			) : (
 				<Icon icon={globe} size={20} />
