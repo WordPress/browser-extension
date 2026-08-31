@@ -870,5 +870,51 @@ console.log('\n[49] the profile.php nonce probe refuses a nonce scraped from a c
 		'a same-origin admin→login redirect yields no nonce and does not throw');
 }
 
+console.log('\n[50] a resolved nonce is tagged with its source origin across a tab navigation (security)');
+{
+	// Navigation race: the popup captures the victim tab, harvests the victim's
+	// nonce from a (deferred) profile.php response, and the tab navigates to an
+	// attacker document before the popup messages back. The popup must tag the
+	// nonce with its true source origin so the receiving document can reject it
+	// (that receiver check lives in content.js and is covered there); the popup
+	// itself does not re-decide, since only the receiver knows its live origin.
+	const VICTIM = 'https://victim.example';
+
+	let msg;
+	let navigatedDuringFetch = false;
+	const chrome = {
+		tabs: {
+			query: async () => [{ id: 7, url: `${VICTIM}/` }],
+			sendMessage: async (_id, m) => { msg = m; return {}; },
+		},
+		scripting: {
+			// Victim page exposes no MAIN-world nonce → forces the profile.php path.
+			executeScript: async () => [{ result: null }],
+		},
+	};
+	const fetchStub = async () => {
+		navigatedDuringFetch = true; // the tab moves to the attacker doc, in flight
+		await Promise.resolve();     // the profile.php response resolves a tick later
+		return {
+			ok: true,
+			url: `${VICTIM}/wp-admin/profile.php`,
+			body: null,
+			text: async () => '<script>var wpApiSettings = {"nonce":"cafe1234"};</script>',
+		};
+	};
+	const loader = new Function(
+		'chrome', 'window', 'navigator', 'fetch',
+		`${actionsSrc}\nreturn { requestSiteInfo };`,
+	);
+	const { requestSiteInfo } = loader(chrome, { close: () => {}, WPRest: null }, { vendor: '' }, fetchStub);
+	await requestSiteInfo(VICTIM);
+
+	assert(navigatedDuringFetch, 'the nonce fetch was in flight during the simulated navigation');
+	assert(msg && msg.type === 'GET_SITE_INFO' && msg.nonce === 'cafe1234',
+		'the popup harvested the victim nonce from the victim origin');
+	assert(msg.nonceOrigin === VICTIM,
+		'the nonce carries its source origin so a navigated receiver can reject it');
+}
+
 console.log(`\n${failures === 0 ? 'Popup action tests passed.' : failures + ' failure(s).'}`);
 process.exit(failures === 0 ? 0 : 1);
