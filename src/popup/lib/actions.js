@@ -291,10 +291,14 @@ export async function requestRestEditUrl() {
  * first (MAIN-world script reads `wpApiSettings` / `_wpApiSettings` / inline
  * config / data-* attributes), then falls back to fetching `wp-admin/profile.php`
  * — admin pages reliably enqueue `wp-api` so the inline config object with
- * the nonce is in the response. Returns the nonce string or null.
+ * the nonce is in the response.
  *
- * Returns { nonce, tab } so callers can reuse the tab handle without
- * re-querying.
+ * Returns { tab, nonce, nonceOrigin } so callers can reuse the tab handle
+ * without re-querying. `nonce` is the string or null; `nonceOrigin` is the
+ * origin the nonce was read from (null when there is no nonce), which the
+ * receiving content document checks against its own origin before using the
+ * nonce, so a mid-resolution tab navigation can't deliver one origin's nonce
+ * to another.
  */
 // Module-scoped memo of the in-flight nonce resolution. The popup process is
 // torn down when the popup closes, so this cache lives exactly one popup

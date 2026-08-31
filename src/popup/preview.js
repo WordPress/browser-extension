@@ -100,7 +100,7 @@ window.chrome = {
 		},
 		onChanged: { addListener: () => {}, removeListener: () => {} },
 	},
-	scripting: { executeScript: async () => [{ result: 'fake-nonce' }] },
+	scripting: { executeScript: async () => [{ result: { nonce: 'fake-nonce', origin: 'https://example.test' } }] },
 	i18n: { getMessage: previewGetMessage },
 };
 
