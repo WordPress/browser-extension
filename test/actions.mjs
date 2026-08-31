@@ -800,5 +800,75 @@ console.log('\n[48] the poll change stays bounded and scoped');
 		'after the bounded poll the stale negative is presented');
 }
 
+console.log('\n[49] the profile.php nonce probe refuses a nonce scraped from a cross-origin redirect (security)');
+{
+	// resolveNonceForTab falls back to fetching wp-admin/profile.php when the
+	// live page exposes no nonce. That credentialed fetch follows redirects, so
+	// an attacker tab can 302 it to a victim install where the user is signed
+	// in and the returned page carries the victim's real REST nonce. The popup
+	// would then hand that foreign-origin nonce to the content script on the
+	// attacker's own tab, which forwards it as X-WP-Nonce to the attacker's
+	// origin. The fix refuses to read a nonce out of a response whose final URL
+	// left the origin we probed. Driven through the real requestSiteInfo so the
+	// forwarded nonce is observable on the GET_SITE_INFO message.
+	const NONCE_HTML = '<script>var wpApiSettings = {"nonce":"deadbeefcafe"};</script>';
+
+	// Fresh loader per scenario so the module-scoped nonce cache never bleeds.
+	const forwardedNonce = async ({ base, tabUrl, responseUrl, body = NONCE_HTML }) => {
+		let sentNonce;
+		const chrome = {
+			tabs: {
+				query: async () => [{ id: 7, url: tabUrl }],
+				sendMessage: async (_tabId, msg) => { sentNonce = msg.nonce; return {}; },
+			},
+			scripting: {
+				// No MAIN-world nonce on the attacker page → forces the fallback.
+				executeScript: async () => [{ result: null }],
+			},
+		};
+		const fetchStub = async () => ({ ok: true, url: responseUrl, body: null, text: async () => body });
+		const loader = new Function(
+			'chrome', 'window', 'navigator', 'fetch',
+			`${actionsSrc}\nreturn { requestSiteInfo };`,
+		);
+		// window.WPRest null → the self-contained regex scan runs (no DOMParser).
+		const { requestSiteInfo } = loader(chrome, { close: () => {}, WPRest: null }, { vendor: '' }, fetchStub);
+		await requestSiteInfo(base);
+		return sentNonce;
+	};
+
+	const attacker = 'https://attacker.example';
+
+	// The attack: attacker tab, profile.php probe 302'd to a victim origin.
+	const leaked = await forwardedNonce({
+		base: attacker,
+		tabUrl: `${attacker}/`,
+		responseUrl: 'https://victim.example/wp-admin/profile.php',
+	});
+	assert(leaked === null,
+		'a nonce scraped from a cross-origin redirected response is not forwarded');
+
+	// Positive control: a genuine same-origin probe still yields its nonce, so
+	// the gate is not just blanket-refusing the fallback.
+	const sameOrigin = await forwardedNonce({
+		base: attacker,
+		tabUrl: `${attacker}/`,
+		responseUrl: `${attacker}/wp-admin/profile.php`,
+	});
+	assert(sameOrigin === 'deadbeefcafe',
+		'a same-origin profile.php response still yields its nonce');
+
+	// A logged-out same-origin admin→login redirect is legitimate: it stays on
+	// the origin and simply carries no nonce (origin-only matching, no throw).
+	const loggedOut = await forwardedNonce({
+		base: attacker,
+		tabUrl: `${attacker}/`,
+		responseUrl: `${attacker}/wp-login.php?redirect_to=%2Fwp-admin%2Fprofile.php`,
+		body: '<html><body>Log In</body></html>',
+	});
+	assert(loggedOut === null,
+		'a same-origin admin→login redirect yields no nonce and does not throw');
+}
+
 console.log(`\n${failures === 0 ? 'Popup action tests passed.' : failures + ' failure(s).'}`);
 process.exit(failures === 0 ? 0 : 1);

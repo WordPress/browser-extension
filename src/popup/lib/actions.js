@@ -42,6 +42,24 @@ async function readTextCapped(res, maxBytes) {
 	return new TextDecoder().decode(merged);
 }
 
+// A followed redirect can move a response to a different origin. When we scrape
+// a secret (the REST nonce) out of a response body, the origin that served it
+// is the security boundary, so refuse anything that ended up cross-origin.
+// Origin only — a same-origin admin→login redirect is legitimate and simply
+// carries no nonce. http(s) only, so a redirect to a data:/blob: URL can't slip
+// through. Mirrors the res.url gate on the content script's fresh-detection
+// fetch (#111).
+function isSameOriginResponse(resUrl, expectedOrigin) {
+	if (!resUrl) return false;
+	try {
+		const u = new URL(resUrl);
+		return (u.protocol === 'http:' || u.protocol === 'https:')
+			&& u.origin === expectedOrigin;
+	} catch (_) {
+		return false;
+	}
+}
+
 export async function runAction(action, { origin, baseUrl, url, editUrl, viewUrl, logoutUrl, visitUrl, newTab = false }) {
 	// Path-aware install base for synthesized links (carries any subdirectory
 	// prefix — issue #33). Callers that predate it pass only `origin`; fall
@@ -331,12 +349,19 @@ async function resolveNonceForTab(tab, baseUrl) {
 			// Subdirectory installs serve wp-admin under a prefix (#33), so
 			// prefer the path-aware base when the caller supplies it.
 			const base = baseUrl || new URL(tab.url).origin;
+			const baseOrigin = new URL(base).origin;
 			const res = await fetch(`${base}/wp-admin/profile.php`, {
 				credentials: 'include',
 				redirect: 'follow',
 				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 			});
-			if (res.ok) {
+			// Only scrape a nonce when the final response is still same-origin
+			// with the base we probed. A followed redirect can otherwise land
+			// this credentialed fetch on another install — an attacker tab can
+			// 302 it to a victim origin where the user is signed in, and that
+			// page's real REST nonce would be handed to the content script on
+			// THIS (attacker) tab. Fail closed: no nonce beats a foreign one.
+			if (res.ok && isSameOriginResponse(res.url, baseOrigin)) {
 				const html = await readTextCapped(res, MAX_RESPONSE_BYTES);
 				// Reuse the shared scanner (also handles the createNonceMiddleware
 				// and data-* forms) instead of a third copy of the nonce regex.
