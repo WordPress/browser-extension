@@ -42,6 +42,24 @@ async function readTextCapped(res, maxBytes) {
 	return new TextDecoder().decode(merged);
 }
 
+// A followed redirect can move a response to a different origin. When we scrape
+// a secret (the REST nonce) out of a response body, the origin that served it
+// is the security boundary, so refuse anything that ended up cross-origin.
+// Origin only — a same-origin admin→login redirect is legitimate and simply
+// carries no nonce. http(s) only, so a redirect to a data:/blob: URL can't slip
+// through. Mirrors the res.url gate on the content script's fresh-detection
+// fetch (#111).
+function isSameOriginResponse(resUrl, expectedOrigin) {
+	if (!resUrl) return false;
+	try {
+		const u = new URL(resUrl);
+		return (u.protocol === 'http:' || u.protocol === 'https:')
+			&& u.origin === expectedOrigin;
+	} catch (_) {
+		return false;
+	}
+}
+
 export async function runAction(action, { origin, baseUrl, url, editUrl, viewUrl, logoutUrl, visitUrl, newTab = false }) {
 	// Path-aware install base for synthesized links (carries any subdirectory
 	// prefix — issue #33). Callers that predate it pass only `origin`; fall
@@ -273,10 +291,14 @@ export async function requestRestEditUrl() {
  * first (MAIN-world script reads `wpApiSettings` / `_wpApiSettings` / inline
  * config / data-* attributes), then falls back to fetching `wp-admin/profile.php`
  * — admin pages reliably enqueue `wp-api` so the inline config object with
- * the nonce is in the response. Returns the nonce string or null.
+ * the nonce is in the response.
  *
- * Returns { nonce, tab } so callers can reuse the tab handle without
- * re-querying.
+ * Returns { tab, nonce, nonceOrigin } so callers can reuse the tab handle
+ * without re-querying. `nonce` is the string or null; `nonceOrigin` is the
+ * origin the nonce was read from (null when there is no nonce), which the
+ * receiving content document checks against its own origin before using the
+ * nonce, so a mid-resolution tab navigation can't deliver one origin's nonce
+ * to another.
  */
 // Module-scoped memo of the in-flight nonce resolution. The popup process is
 // torn down when the popup closes, so this cache lives exactly one popup
@@ -302,28 +324,42 @@ async function resolveRestNonce(baseUrl = null) {
 
 async function resolveNonceForTab(tab, baseUrl) {
 	let nonce = null;
+	// The origin the nonce was actually read from. A nonce is bound to its
+	// source origin; the receiving content document refuses it unless that
+	// origin still matches its own, so a mid-resolution tab navigation can't
+	// deliver a victim origin's nonce to an attacker document that later
+	// occupies the same tab id.
+	let nonceOrigin = null;
+	let tabOrigin = null;
+	try { tabOrigin = new URL(tab.url).origin; } catch (_) { /* missing/odd tab url */ }
 	try {
 		const [out] = await chrome.scripting.executeScript({
 			target: { tabId: tab.id },
 			world: 'MAIN',
 			func: () => {
-				if (window.wpApiSettings?.nonce) return window.wpApiSettings.nonce;
-				if (window._wpApiSettings?.nonce) return window._wpApiSettings.nonce;
-				if (window.wp?.apiFetch?.nonceMiddleware?.nonce) return window.wp.apiFetch.nonceMiddleware.nonce;
-				for (const s of document.querySelectorAll('script:not([src])')) {
-					const t = s.textContent || '';
-					const m = t.match(/(?:wpApiSettings|_wpApiSettings)\s*=\s*\{[^}]*"nonce"\s*:\s*"([a-f0-9]+)"/)
-						|| t.match(/wp\.api\.fetch\.use\(\s*wp\.api\.fetch\.createNonceMiddleware\(\s*"([a-f0-9]+)"/);
-					if (m) return m[1];
-				}
-				const el = document.querySelector('[data-rest-nonce], [data-wp-nonce], [data-nonce]');
-				return el?.getAttribute('data-rest-nonce')
-					|| el?.getAttribute('data-wp-nonce')
-					|| el?.getAttribute('data-nonce')
-					|| null;
+				const readNonce = () => {
+					if (window.wpApiSettings?.nonce) return window.wpApiSettings.nonce;
+					if (window._wpApiSettings?.nonce) return window._wpApiSettings.nonce;
+					if (window.wp?.apiFetch?.nonceMiddleware?.nonce) return window.wp.apiFetch.nonceMiddleware.nonce;
+					for (const s of document.querySelectorAll('script:not([src])')) {
+						const t = s.textContent || '';
+						const m = t.match(/(?:wpApiSettings|_wpApiSettings)\s*=\s*\{[^}]*"nonce"\s*:\s*"([a-f0-9]+)"/)
+							|| t.match(/wp\.api\.fetch\.use\(\s*wp\.api\.fetch\.createNonceMiddleware\(\s*"([a-f0-9]+)"/);
+						if (m) return m[1];
+					}
+					const el = document.querySelector('[data-rest-nonce], [data-wp-nonce], [data-nonce]');
+					return el?.getAttribute('data-rest-nonce')
+						|| el?.getAttribute('data-wp-nonce')
+						|| el?.getAttribute('data-nonce')
+						|| null;
+				};
+				// Report the origin the nonce was read from so the receiving
+				// document can reject it if this tab has since navigated.
+				return { nonce: readNonce(), origin: location.origin };
 			},
 		});
-		nonce = out?.result || null;
+		nonce = out?.result?.nonce || null;
+		nonceOrigin = nonce ? (out?.result?.origin || null) : null;
 	} catch (_) { /* page disallows scripting */ }
 
 	if (!nonce) {
@@ -331,12 +367,22 @@ async function resolveNonceForTab(tab, baseUrl) {
 			// Subdirectory installs serve wp-admin under a prefix (#33), so
 			// prefer the path-aware base when the caller supplies it.
 			const base = baseUrl || new URL(tab.url).origin;
+			const baseOrigin = new URL(base).origin;
+			// Only probe the origin the active tab was on when resolution began;
+			// a base that resolves to a different origin is never fetched.
+			if (baseOrigin !== tabOrigin) return { tab, nonce: null, nonceOrigin: null };
 			const res = await fetch(`${base}/wp-admin/profile.php`, {
 				credentials: 'include',
 				redirect: 'follow',
 				signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
 			});
-			if (res.ok) {
+			// Only scrape a nonce when the final response is still same-origin
+			// with the base we probed. A followed redirect can otherwise land
+			// this credentialed fetch on another install — an attacker tab can
+			// 302 it to a victim origin where the user is signed in, and that
+			// page's real REST nonce would be handed to the content script on
+			// THIS (attacker) tab. Fail closed: no nonce beats a foreign one.
+			if (res.ok && isSameOriginResponse(res.url, baseOrigin)) {
 				const html = await readTextCapped(res, MAX_RESPONSE_BYTES);
 				// Reuse the shared scanner (also handles the createNonceMiddleware
 				// and data-* forms) instead of a third copy of the nonce regex.
@@ -348,11 +394,12 @@ async function resolveNonceForTab(tab, baseUrl) {
 					const m = html.match(/(?:wpApiSettings|_wpApiSettings)\s*=\s*\{[^}]*"nonce"\s*:\s*"([a-f0-9]+)"/);
 					if (m) nonce = m[1];
 				}
+				if (nonce) nonceOrigin = baseOrigin;
 			}
 		} catch (_) { /* admin fetch failed — give up, will pass null */ }
 	}
 
-	return { tab, nonce };
+	return { tab, nonce, nonceOrigin };
 }
 
 /**
@@ -363,8 +410,8 @@ async function resolveNonceForTab(tab, baseUrl) {
  */
 export async function requestTemplateEditUrl(baseUrl = null) {
 	try {
-		const { tab, nonce } = await resolveRestNonce(baseUrl);
-		const res = await chrome.tabs.sendMessage(tab.id, { type: 'RESOLVE_TEMPLATE_EDIT_URL', nonce });
+		const { tab, nonce, nonceOrigin } = await resolveRestNonce(baseUrl);
+		const res = await chrome.tabs.sendMessage(tab.id, { type: 'RESOLVE_TEMPLATE_EDIT_URL', nonce, nonceOrigin });
 		return res || { url: null, isBlockTheme: null };
 	} catch (_) {
 		return { url: null, isBlockTheme: null };
@@ -373,8 +420,8 @@ export async function requestTemplateEditUrl(baseUrl = null) {
 
 export async function requestSiteInfo(baseUrl = null) {
 	try {
-		const { tab, nonce } = await resolveRestNonce(baseUrl);
-		const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SITE_INFO', nonce });
+		const { tab, nonce, nonceOrigin } = await resolveRestNonce(baseUrl);
+		const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_SITE_INFO', nonce, nonceOrigin });
 		return res || null;
 	} catch (_) {
 		return null;
@@ -383,7 +430,7 @@ export async function requestSiteInfo(baseUrl = null) {
 
 export async function requestCurrentUser(baseUrl = null) {
 	try {
-		const { tab, nonce } = await resolveRestNonce(baseUrl);
+		const { tab, nonce, nonceOrigin } = await resolveRestNonce(baseUrl);
 		// users/me?context=edit needs a valid REST nonce — cookie auth without
 		// one is always rejected with a 401. Skip the doomed request when no
 		// nonce could be resolved (common on logged-in frontends that don't
@@ -391,7 +438,7 @@ export async function requestCurrentUser(baseUrl = null) {
 		// gates are DOM-first and don't depend on this; the fetch only enriches
 		// the role label / caps when a nonce is actually available.
 		if (!nonce) return null;
-		const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_CURRENT_USER', nonce });
+		const res = await chrome.tabs.sendMessage(tab.id, { type: 'GET_CURRENT_USER', nonce, nonceOrigin });
 		return res?.user || null;
 	} catch (_) {
 		return null;
