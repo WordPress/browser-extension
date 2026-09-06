@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Collapsible, Icon } from '@wordpress/ui';
 import { chevronDown, globe, dashboard, close } from '@wordpress/icons';
 import { useMySites } from '../hooks/useMySites';
@@ -72,9 +72,22 @@ function MySiteRow({ site, label, defaultLabel, editing, onRemove, onRename }) {
 	const { origin, key } = site;
 	const baseUrl = site.baseUrl || origin;
 	const iconUrl = site.iconUrl || null;
-	const defaultFavicon = origin ? `${origin}/favicon.ico` : null;
+	// Rooted at the install base, not the origin: records are keyed by base
+	// (#94), so two installs on one host must not borrow each other's icon.
+	// Subdirectory installs mostly fall through to the globe (core only
+	// registers the favicon.ico rewrite at the domain root), which beats
+	// showing another site's icon.
+	const defaultFavicon = `${baseUrl}/favicon.ico`;
 	const [activeIcon, setActiveIcon] = useState(iconUrl || defaultFavicon);
 	const [iconFailed, setIconFailed] = useState(false);
+	// Rows keep their instance across store updates (keyed by site.key), so a
+	// Site Icon captured by a later login would otherwise sit behind the prop
+	// copied into state until the popup reopened. Re-seed the icon and clear
+	// the failure flag whenever the candidates change.
+	useEffect(() => {
+		setActiveIcon(iconUrl || defaultFavicon);
+		setIconFailed(false);
+	}, [iconUrl, defaultFavicon]);
 	let host = origin;
 	try {
 		host = new URL(origin).host;
