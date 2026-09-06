@@ -413,6 +413,57 @@ async function main() {
       'detection still receives the pathname captured at request time');
   }
 
+  {
+    console.log('\n[46] a nonce is honoured only when its source origin is this document (navigation race, security)');
+    const VICTIM = 'https://victim.example';
+    const ATTACKER = 'https://attacker.example';
+
+    // A document that has taken over the tab at the attacker origin. The popup
+    // resolved the nonce against the victim tab, then the tab navigated here
+    // before the message arrived. Capture the nonce each REST handler would
+    // forward, without issuing a real request.
+    function attackerDoc() {
+      const page = makePage(WP_LOGGED_IN_PAGE, { url: `${ATTACKER}/` });
+      page.runContent();
+      let captured = 'UNSET';
+      const capture = async ({ nonce }) => { captured = nonce; return null; };
+      page.ctx.WPRest.fetchSiteInfo = capture;
+      page.ctx.WPRest.fetchActiveTheme = async () => null;
+      page.ctx.WPRest.fetchPluginsDetail = async () => null;
+      page.ctx.WPRest.fetchCurrentUser = capture;
+      page.ctx.WPRest.resolveTemplateEditUrlAsync = async ({ nonce }) => {
+        captured = nonce;
+        return { url: null, isBlockTheme: null };
+      };
+      return { page, captured: () => captured };
+    }
+
+    const dispatch = (page, message) => new Promise((resolve) => {
+      let done = false;
+      const reply = (r) => { if (!done) { done = true; resolve(r); } };
+      for (const fn of page.listeners) fn(message, {}, reply);
+    });
+
+    const TYPES = ['GET_SITE_INFO', 'GET_CURRENT_USER', 'RESOLVE_TEMPLATE_EDIT_URL'];
+
+    // Cross-origin: the victim's nonce delivered to the attacker document is
+    // dropped, so it never reaches an X-WP-Nonce header on the attacker origin.
+    for (const type of TYPES) {
+      const doc = attackerDoc();
+      await dispatch(doc.page, { type, nonce: 'victimnonce', nonceOrigin: VICTIM });
+      assert(doc.captured() === null,
+        `${type} refuses a nonce whose source origin is another document`);
+    }
+
+    // Same-origin: the nonce was read from this very document, so it is used.
+    for (const type of TYPES) {
+      const doc = attackerDoc();
+      await dispatch(doc.page, { type, nonce: 'ownnonce', nonceOrigin: ATTACKER });
+      assert(doc.captured() === 'ownnonce',
+        `${type} uses a nonce whose source origin matches this document`);
+    }
+  }
+
   console.log(`\n${failures === 0 ? 'Content lifecycle tests passed.' : failures + ' failure(s).'}`);
   process.exit(failures === 0 ? 0 : 1);
 }

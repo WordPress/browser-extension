@@ -204,6 +204,18 @@
     }
   }
 
+  // A nonce the popup resolved is bound to the origin it was read from. The
+  // popup captures the active tab once, then awaits a MAIN-world read and maybe
+  // a profile.php fetch before messaging back — the tab can navigate in that
+  // window, and the message would then be delivered to whatever document now
+  // holds the tab id. Only honor the nonce when its source origin still equals
+  // this document's origin, so a victim origin's nonce can't be replayed from
+  // an attacker document that took over the tab. This is the authoritative
+  // check: only the receiving document knows its own origin at delivery time.
+  function nonceForThisDocument(msg) {
+    return msg && msg.nonce && msg.nonceOrigin === location.origin ? msg.nonce : null;
+  }
+
   chrome.runtime.onMessage.addListener((msg, _sender, sendResponse) => {
     if (!msg) return;
 
@@ -321,7 +333,7 @@
       // to a site-editor deep link. Needs an authenticated REST round-trip
       // (/themes + /templates are private), so the popup passes the nonce it
       // already resolves for the site-info/user endpoints.
-      const nonce = msg.nonce || null;
+      const nonce = nonceForThisDocument(msg);
       globalThis.WPRest
         .resolveTemplateEditUrlAsync({ ctx: detection.context, origin: location.origin, nonce })
         .then((res) => sendResponse(res || { url: null, isBlockTheme: null }))
@@ -336,7 +348,7 @@
       // /wp/v2/themes and /wp/v2/plugins reject cookie auth without the
       // X-WP-Nonce header even for read-only GETs.
       const ctx = detection.context;
-      const nonce = msg.nonce || null;
+      const nonce = nonceForThisDocument(msg);
       Promise.all([
         globalThis.WPRest.fetchSiteInfo({
           restApiRoot: ctx.restApiRoot, origin: location.origin, nonce,
@@ -357,7 +369,7 @@
       // Fetches /wp/v2/users/me?context=edit. The nonce arrives from the
       // popup via the same MAIN-world extraction that GET_SITE_INFO uses.
       const ctx = detection.context;
-      const nonce = msg.nonce || null;
+      const nonce = nonceForThisDocument(msg);
       globalThis.WPRest
         .fetchCurrentUser({ restApiRoot: ctx.restApiRoot, origin: location.origin, nonce })
         .then((user) => sendResponse({ user }))
