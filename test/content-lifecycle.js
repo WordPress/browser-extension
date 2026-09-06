@@ -462,6 +462,60 @@ async function main() {
       assert(doc.captured() === 'ownnonce',
         `${type} uses a nonce whose source origin matches this document`);
     }
+
+    console.log('\n[47] RESOLVE_HOST_HEADERS is gated on the final response URL (#113)');
+    const PAGE_PATH = '/blog/hello-world/';
+    const PAGE_URL = `https://example.com${PAGE_PATH}`;
+
+    async function resolveHost(responseUrl, { pageUrl = PAGE_URL, headers = { 'x-powered-by': 'WP Engine' } } = {}) {
+      const page = makePage(WP_LOGGED_IN_PAGE, { url: pageUrl });
+      page.runContent();
+      await settle();
+
+      const requested = [];
+      const savedFetch = globalThis.fetch;
+      globalThis.fetch = async (input) => {
+        requested.push(String(input));
+        const res = {
+          ok: true,
+          headers: new page.ctx.Headers(headers),
+        };
+        if (responseUrl !== undefined) res.url = responseUrl;
+        return res;
+      };
+      try {
+        const resp = await new Promise((resolve) => {
+          for (const fn of page.listeners) fn({ type: 'RESOLVE_HOST_HEADERS' }, {}, resolve);
+        });
+        return { resp, requested };
+      } finally {
+        globalThis.fetch = savedFetch;
+      }
+    }
+
+    const same = await resolveHost(PAGE_URL);
+    assert(same.requested[0] === PAGE_URL, 'HEAD requests the page URL');
+    assert(same.resp.host === 'wpengine', 'an unredirected response resolves the host');
+
+    const login = await resolveHost('https://example.com/wp-login.php');
+    assert(login.resp.host === null, 'a same-origin redirect to another document is refused');
+
+    const offsite = await resolveHost('https://cdn.example.net/blog/hello-world/');
+    assert(offsite.resp.host === null, 'a cross-origin redirect is refused');
+
+    const unattested = await resolveHost(undefined);
+    assert(unattested.resp.host === null, 'a response with no URL is refused');
+
+    const empty = await resolveHost('');
+    assert(empty.resp.host === null, 'an empty response URL is refused');
+
+    const otherPost = await resolveHost('https://example.com/index.php?p=2', {
+      pageUrl: 'https://example.com/index.php?p=1',
+    });
+    assert(otherPost.resp.host === null, 'a redirect to a different document-selecting query is refused');
+
+    const fragment = await resolveHost(`${PAGE_URL}#section`);
+    assert(fragment.resp.host === 'wpengine', 'a fragment-only difference still resolves host headers');
   }
 
   console.log(`\n${failures === 0 ? 'Content lifecycle tests passed.' : failures + ' failure(s).'}`);

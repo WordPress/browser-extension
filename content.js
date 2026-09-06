@@ -303,13 +303,18 @@
     }
 
     if (msg.type === 'RESOLVE_HOST_HEADERS') {
+      const target = new URL(location.href);
       // Same-origin HEAD request — cookies flow, no CORS, minimal payload.
-      fetch(location.href, {
+      fetch(target.href, {
         method: 'HEAD',
         credentials: 'include',
         signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
       })
         .then((res) => {
+          if (!isSameDocumentResponse(res.url, target)) {
+            sendResponse({ host: null });
+            return;
+          }
           const host = globalThis.WPHost.detectHostFromHeaders(res.headers);
           sendResponse({ host });
         })
