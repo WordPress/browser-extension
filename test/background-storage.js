@@ -79,7 +79,7 @@ function makeStorage(initial = {}) {
 
 /** Loads background.js with stubs; returns the captured onMessage listener
  * plus the storage handle. */
-function loadBackground(storage) {
+function loadBackground(storage, overrides = {}) {
   // The lib IIFEs attach to the passed globalThis object.
   const libCtx = {};
   new Function('globalThis', mySitesSrc)(libCtx);
@@ -109,7 +109,7 @@ function loadBackground(storage) {
     tabs: {
       onUpdated: noopEvent,
       query: async () => [],
-      sendMessage: async () => ({}),
+      sendMessage: overrides.sendMessage || (async () => ({})),
       update: async (tabId, opts) => {
         if (typeof tabId === 'number' && opts && opts.url) {
           winState.navigated.push({ tabId, url: opts.url });
@@ -825,6 +825,70 @@ async function main() {
         assert(Object.keys(store).length === 2, `${label}: no record moved, none lost`);
       }
     }
+  }
+
+  // --- 42. Host badge re-validation (#121) -------------------------------
+  {
+    console.log('\n[42] host badge: a cached host re-validates on the 90-day clock; a missing host retries sooner (#121)');
+    const DAY = 24 * 60 * 60 * 1000;
+    const ORIGIN = 'https://h.example';
+    const KEY = `wp_cache_${ORIGIN}`;
+    const now = Date.now();
+    const seed = (host, hostCheckedAt) => ({
+      origin: ORIGIN, isWordPress: true, confidence: 100, signals: ['rest-api-link'],
+      isLoggedIn: false, checkedAt: now, lastSeen: now, host, hostCheckedAt,
+    });
+    // One page load against a seeded cache entry with the header probe
+    // stubbed; reports whether the probe ran and what got stored.
+    const load = async (entry, probe, hostFromDOM = null) => {
+      const probes = [];
+      const storage = makeStorage({ [KEY]: entry });
+      const { send } = loadBackground(storage, {
+        sendMessage: async (_tabId, msg) => {
+          if (msg?.type === 'RESOLVE_HOST_HEADERS') probes.push(msg.type);
+          return probe();
+        },
+      });
+      await send({
+        type: 'WP_DETECTION',
+        detection: { isWordPress: true, confidence: 100, signals: ['rest-api-link'], context: { isLoggedIn: false } },
+        hostFromDOM,
+      }, { url: `${ORIGIN}/page`, origin: ORIGIN, tab: { id: 9, url: `${ORIGIN}/page` } });
+      await settle();
+      return { probed: probes.length, stored: storage.read(KEY) };
+    };
+
+    // A cached host past the refresh interval is re-probed, and the probe's
+    // answer replaces it: a wrong badge no longer persists indefinitely.
+    let r = await load(seed('wpengine', now - 91 * DAY), async () => ({ host: 'kinsta' }));
+    assert(r.probed === 1, 'stale cached host: header probe runs');
+    assert(r.stored.host === 'kinsta', 'stale cached host: probe result replaces the cached badge');
+    assert(r.stored.hostCheckedAt >= now, 'stale cached host: clock restarts');
+
+    // A fresh cached host is left alone: no probe per page load.
+    r = await load(seed('wpengine', now - 1 * DAY), async () => ({ host: 'kinsta' }));
+    assert(r.probed === 0 && r.stored.host === 'wpengine', 'fresh cached host: no probe, badge kept');
+
+    // Latest probe wins: a null answer on re-validation clears the badge
+    // (a site that moved to a host with no header signature).
+    r = await load(seed('wpengine', now - 91 * DAY), async () => ({ host: null }));
+    assert(r.probed === 1 && r.stored.host === null, 'stale cached host, null probe: badge cleared');
+
+    // A missing host retries on the shorter clock, not the 90-day one, so a
+    // one-off probe rejection (#115 gate) doesn't suppress the badge for months.
+    r = await load(seed(null, now - 8 * DAY), async () => ({ host: 'kinsta' }));
+    assert(r.probed === 1 && r.stored.host === 'kinsta', 'missing host past the retry interval: probe runs and sets the badge');
+    r = await load(seed(null, now - 1 * DAY), async () => ({ host: 'kinsta' }));
+    assert(r.probed === 0 && r.stored.host === null, 'missing host inside the retry interval: no probe');
+
+    // A DOM/origin host signal on the current page wins outright: no probe.
+    r = await load(seed('wpengine', now - 91 * DAY), async () => ({ host: 'kinsta' }), 'selfhosted');
+    assert(r.probed === 0 && r.stored.host === 'selfhosted', 'DOM host signal: no probe, DOM host stored');
+
+    // Content script gone mid-probe: entry untouched, so it retries next load.
+    r = await load(seed('wpengine', now - 91 * DAY), async () => { throw new Error('no receiver'); });
+    assert(r.probed === 1 && r.stored.host === 'wpengine' && r.stored.hostCheckedAt === now - 91 * DAY,
+      'probe failure: cached badge and clock left as they were');
   }
 
   console.log(`\n${failures === 0 ? 'Background storage tests passed.' : failures + ' failure(s).'}`);
