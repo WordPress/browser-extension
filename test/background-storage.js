@@ -869,6 +869,13 @@ async function main() {
     r = await load(seed('wpengine', now - 1 * DAY), async () => ({ host: 'kinsta' }));
     assert(r.probed === 0 && r.stored.host === 'wpengine', 'fresh cached host: no probe, badge kept');
 
+    // Eight days is past the retry clock but inside the refresh clock: a
+    // cached host must still not probe. Guards the 90-day / 7-day
+    // distinction (both clocks at seven days would probe here).
+    r = await load(seed('wpengine', now - 8 * DAY), async () => ({ host: 'kinsta' }));
+    assert(r.probed === 0 && r.stored.host === 'wpengine' && r.stored.hostCheckedAt === now - 8 * DAY,
+      'cached host between the two clocks: no probe, host and clock unchanged');
+
     // Latest probe wins: a null answer on re-validation clears the badge
     // (a site that moved to a host with no header signature).
     r = await load(seed('wpengine', now - 91 * DAY), async () => ({ host: null }));
