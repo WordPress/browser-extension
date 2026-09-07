@@ -8,6 +8,13 @@
   "author": "Jake Goldman, Partner at Fueled",
   "homepage_url": "https://github.com/WordPress/browser-extension",
 
+  "browser_specific_settings": {
+    "gecko": {
+      "id": "browser-extension@wordpress.org",
+      "strict_min_version": "121.0"
+    }
+  },
+
   "action": {
     "default_title": "__MSG_ext_action_title__",
     "default_icon": {
@@ -23,7 +30,8 @@
   },
 
   "background": {
-    "service_worker": "background.js"
+    "service_worker": "background.js",
+    "scripts": ["lib/my-sites.js", "lib/rest.js", "background.js"]
   },
 
   "content_scripts": [
