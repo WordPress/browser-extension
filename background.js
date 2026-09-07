@@ -34,7 +34,15 @@ const CACHE_PREFIX = 'wp_cache_';
 const LEGACY_CACHE_KEY = 'wp_detection_cache_v1';
 const REFRESH_INTERVAL      = 7 * 24 * 60 * 60 * 1000;  // 1 week
 const PURGE_AFTER           = 28 * 24 * 60 * 60 * 1000;  // 4 weeks
+// Host badge clocks (#121). A cached host is re-validated every
+// HOST_REFRESH_INTERVAL so a badge cached wrong (a pre-#115 redirect follow,
+// or a site that since moved hosts) doesn't persist indefinitely. A missing
+// host retries every HOST_RETRY_INTERVAL: shorter, so a one-off probe
+// rejection (the #115 same-document gate) doesn't suppress the badge for
+// three months, but not per page load, since most self-hosted sites carry no
+// host header at all.
 const HOST_REFRESH_INTERVAL = 90 * 24 * 60 * 60 * 1000;  // 90 days
+const HOST_RETRY_INTERVAL   = 7 * 24 * 60 * 60 * 1000;   // 7 days
 
 // --- Cache helpers (one storage key per origin) ---------------------------
 
@@ -600,11 +608,15 @@ async function handleDetection(msg, sender) {
     hostCheckedAt,
   };
 
-  // If WordPress but host is still unknown and we haven't checked
-  // recently, ask the content script to inspect response headers.
-  // Resolve before the first write so we don't write twice.
-  const needsHostCheck = entry.isWordPress && !entry.host &&
-    (!entry.hostCheckedAt || (now - entry.hostCheckedAt) > HOST_REFRESH_INTERVAL);
+  // If WordPress and the host badge is due, ask the content script to
+  // inspect response headers: a cached host on the refresh clock, a missing
+  // one on the shorter retry clock (see the interval constants). The probe's
+  // answer replaces whatever was cached, null included, so the badge always
+  // reflects the latest probe. Resolve before the first write so we don't
+  // write twice.
+  const hostInterval = entry.host ? HOST_REFRESH_INTERVAL : HOST_RETRY_INTERVAL;
+  const needsHostCheck = entry.isWordPress &&
+    (!entry.hostCheckedAt || (now - entry.hostCheckedAt) > hostInterval);
 
   if (needsHostCheck) {
     try {
