@@ -1,0 +1,431 @@
+{
+  "ext_name": {
+    "message": "Extensão do Navegador WordPress",
+    "description": "Extension name shown in browser UI"
+  },
+  "ext_short_name": {
+    "message": "WordPress",
+    "description": "Short name shown where space is limited"
+  },
+  "ext_description": {
+    "message": "Acesso rápido a seus sites WordPress, edição de conteúdo e ferramentas de desenvolvedor. Esconda a barra de admin.",
+    "description": "Extension description shown in the browser's extension store and management pages. The Chrome Web Store shows it as the listing summary and enforces a 132-character limit."
+  },
+  "ext_action_title": {
+    "message": "Extensão do Navegador WordPress",
+    "description": "Tooltip for the toolbar icon button"
+  },
+  "cmd_edit_this_page": {
+    "message": "Editar esta página no WordPress",
+    "description": "Description for the keyboard shortcut command"
+  },
+
+  "options_page_title": {
+    "message": "Extensão do Navegador WordPress — Opções",
+    "description": "HTML page title for the options page"
+  },
+  "options_heading": {
+    "message": "Extensão do Navegador WordPress",
+    "description": "H1 heading on the options page"
+  },
+  "options_subtitle": {
+    "message": "Padrões globais do navegador. As escolhas por site continuam no popup da barra de ferramentas.",
+    "description": "Subtitle under the options page heading"
+  },
+  "options_admin_bar_section": {
+    "message": "Barra de administração",
+    "description": "Section heading for admin bar settings"
+  },
+  "options_hide_admin_bar_label": {
+    "message": "Ocultar a barra de administração por padrão",
+    "description": "Toggle label for the hide-admin-bar option"
+  },
+  "options_hide_admin_bar_hint": {
+    "message": "Quando ativado, a barra de administração começa oculta em novos sites WordPress. As preferências por site no popup continuam tendo prioridade.",
+    "description": "Hint text describing the hide-admin-bar toggle behavior"
+  },
+  "options_experimental_section": {
+    "message": "Experimental",
+    "description": "Section heading for experimental features"
+  },
+  "options_site_info_label": {
+    "message": "Mostrar painel de informações do site",
+    "description": "Toggle label for the site information panel option"
+  },
+  "options_site_info_hint": {
+    "message": "Adiciona um painel ao popup que mostra o tema ativo, plugins instalados, o nome do site e os namespaces REST. A detecção é heurística — a inferência de caminhos de assets pode gerar duplicatas e falsos positivos (por exemplo, mu-plugins e drop-ins). Desativado por padrão.",
+    "description": "Hint text describing the site information panel feature"
+  },
+  "options_data_section": {
+    "message": "Dados",
+    "description": "Section heading for data management settings"
+  },
+  "options_reset_label": {
+    "message": "Redefinir dados da extensão",
+    "description": "Label for the reset/clear data option"
+  },
+  "options_reset_hint": {
+    "message": "Apaga todas as preferências por site salvas, os padrões globais desta página e os resultados em cache de \"este site é WordPress\". Útil para testes ou recomeçar do zero.",
+    "description": "Hint text describing what the reset action clears"
+  },
+  "options_clear_button": {
+    "message": "Apagar todos os dados",
+    "description": "Button label to trigger clearing all extension data"
+  },
+  "options_clear_confirm": {
+    "message": "Apagar todos os dados da extensão?\n\nIsso remove todas as preferências por site salvas, os padrões globais desta página, os resultados em cache da detecção de WordPress e sua lista de Meus Sites salva. Não pode ser desfeito.",
+    "description": "Confirmation dialog text shown before clearing all data"
+  },
+  "options_cleared_success": {
+    "message": "Apagado.",
+    "description": "Status message shown after successfully clearing extension data"
+  },
+  "options_cleared_error": {
+    "message": "Não foi possível apagar os dados. Tente novamente.",
+    "description": "Status message shown when clearing extension data fails"
+  },
+
+  "toolbar_title_detected": {
+    "message": "WordPress detectado",
+    "description": "Toolbar icon tooltip when a WordPress site is detected but the user is not logged in"
+  },
+  "toolbar_title_detected_logged_in": {
+    "message": "WordPress detectado — conectado",
+    "description": "Toolbar icon tooltip when a WordPress site is detected and the user is logged in"
+  },
+  "toolbar_title_default": {
+    "message": "Extensão do Navegador WordPress",
+    "description": "Default toolbar icon tooltip when no WordPress site is detected"
+  },
+  "admin_bar_hidden_notice": {
+    "message": "[Extensão do Navegador WordPress] Barra de administração oculta neste site. Alterne \"Mostrar Barra de Administração\" no popup da extensão ou na página de opções.",
+    "description": "Console info message shown when the admin bar is hidden on a site"
+  },
+
+  "error_view_title": {
+    "message": "Algo deu errado",
+    "description": "Title shown in the popup error state"
+  },
+  "error_view_description": {
+    "message": "Verifique os logs do service worker.",
+    "description": "Description shown in the popup error state"
+  },
+  "not_supported_title": {
+    "message": "Nada para inspecionar aqui",
+    "description": "Title shown when the current tab cannot be inspected (e.g. new tab, browser pages)"
+  },
+  "not_supported_description": {
+    "message": "Abra um site para começar.",
+    "description": "Description shown when the current tab cannot be inspected"
+  },
+  "not_wordpress_title": {
+    "message": "Não é um site WordPress",
+    "description": "Title shown when the current site is not detected as WordPress"
+  },
+  "not_wordpress_description": {
+    "message": "Nenhum sinal detectado.",
+    "description": "Description shown when the current site is not detected as WordPress"
+  },
+
+  "verb_view": {
+    "message": "Visualizar",
+    "description": "Verb prefix for viewing a published post/page from the WP admin edit screen"
+  },
+  "verb_preview": {
+    "message": "Pré-visualizar",
+    "description": "Verb prefix for previewing a draft post/page from the WP admin edit screen"
+  },
+  "visit_site": {
+    "message": "Visitar site",
+    "description": "Button label to visit the WordPress site's frontend"
+  },
+  "wordpress_admin": {
+    "message": "Administração do WordPress",
+    "description": "Button label to open the WordPress admin dashboard"
+  },
+  "log_in": {
+    "message": "Entrar",
+    "description": "Button label to log into a WordPress site"
+  },
+  "log_in_return": {
+    "message": "Entrar e voltar à página",
+    "description": "Button label to log in and return to the current page"
+  },
+  "show_admin_bar": {
+    "message": "Mostrar a barra de administração",
+    "description": "Toggle label to show/hide the WordPress admin bar"
+  },
+  "admin_bar_disabled_info": {
+    "message": "A barra de administração parece estar desativada pelo seu perfil ou tema, o que limita esta extensão.",
+    "description": "Info text shown when the admin bar cannot be toggled due to profile or theme settings"
+  },
+  "check_profile_link": {
+    "message": "Verificar perfil →",
+    "description": "Link text directing users to their WordPress profile settings"
+  },
+
+  "copy_url_label": {
+    "message": "Copiar URL",
+    "description": "Aria-label and tooltip for the copy URL button"
+  },
+  "copied_label": {
+    "message": "Copiado",
+    "description": "Aria-label and tooltip for the copy URL button after the URL has been copied"
+  },
+  "open_new_tab_label": {
+    "message": "Abrir em uma nova guia",
+    "description": "Aria-label and tooltip for the open-in-new-tab button"
+  },
+
+  "account_menu_label": {
+    "message": "Menu da conta",
+    "description": "Aria-label for the user account menu button when no display name is available"
+  },
+  "account_menu_for_user": {
+    "message": "Menu da conta de $NAME$",
+    "description": "Aria-label for the user account menu button when a display name is available",
+    "placeholders": {
+      "name": { "content": "$1" }
+    }
+  },
+  "profile_menu_item": {
+    "message": "Perfil",
+    "description": "Menu item linking to the user's WordPress profile"
+  },
+  "gravatar_menu_item": {
+    "message": "Gravatar",
+    "description": "Menu item linking to the user's Gravatar profile"
+  },
+  "log_out_button": {
+    "message": "Sair",
+    "description": "Button label to log out of the WordPress site"
+  },
+  "confirm_click_button": {
+    "message": "Clique novamente para confirmar",
+    "description": "Button label shown after first click on a destructive action, prompting a second confirmation click"
+  },
+  "super_admin_role": {
+    "message": "Super Administrador",
+    "description": "Role badge label for WordPress multisite super administrators"
+  },
+
+  "new_content_label": {
+    "message": "Novo",
+    "description": "Section label for the 'New content' action group in the popup"
+  },
+
+  "dev_tools_label": {
+    "message": "Ferramentas de desenvolvimento",
+    "description": "Section label for the developer tools group in the popup"
+  },
+  "highlight_blocks_toggle": {
+    "message": "Realçar blocos",
+    "description": "Toggle label for the block highlighter developer tool"
+  },
+  "mobile_preview_action": {
+    "message": "Pré-visualização para celular",
+    "description": "Action label to open the site in mobile preview mode"
+  },
+  "bypass_page_cache_action": {
+    "message": "Ignorar cache de página",
+    "description": "Action label to reload the page bypassing the server-side page cache"
+  },
+  "query_monitor_toggle": {
+    "message": "Query Monitor",
+    "description": "Toggle label for the Query Monitor plugin panel"
+  },
+  "clear_site_data_action": {
+    "message": "Apagar dados do site (manter login)",
+    "description": "Action label to clear browser site data while preserving the login session"
+  },
+
+  "confirm_label": {
+    "message": "Confirmar",
+    "description": "Default label for inline confirmation buttons"
+  },
+
+  "site_info_label": {
+    "message": "Informações do site",
+    "description": "Section label for the site information panel"
+  },
+  "site_info_loading": {
+    "message": "Carregando informações do site…",
+    "description": "Aria-live status text while site information is being fetched"
+  },
+  "active_theme_label": {
+    "message": "Tema ativo",
+    "description": "Label for the active theme row in the site information panel"
+  },
+  "plugins_label": {
+    "message": "Plugins",
+    "description": "Section label for the plugins group when the count is zero or unknown"
+  },
+  "plugins_with_count": {
+    "message": "Plugins ($COUNT$)",
+    "description": "Section label for plugins when the total count is known from REST",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "detected_plugins_with_count": {
+    "message": "Plugins detectados ($COUNT$)",
+    "description": "Section label for plugins detected via DOM asset paths when REST count is unavailable",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "login_for_plugin_list": {
+    "message": "Entre para ver uma lista completa de plugins com informações adicionais.",
+    "description": "Hint shown in the plugins section when the user is logged out"
+  },
+  "nothing_detected": {
+    "message": "Nada além do que conseguimos detectar.",
+    "description": "Hint shown when no additional site information could be detected"
+  },
+  "login_for_info": {
+    "message": "Entre para obter informações adicionais.",
+    "description": "Hint shown in the theme section when the user is logged out"
+  },
+
+  "update_singular": {
+    "message": "$COUNT$ atualização",
+    "description": "Status badge label for a single pending WordPress update",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "update_plural": {
+    "message": "$COUNT$ atualizações",
+    "description": "Status badge label for multiple pending WordPress updates",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "pending_comment_singular": {
+    "message": "$COUNT$ comentário pendente",
+    "description": "Status badge label for a single comment awaiting moderation",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+  "pending_comment_plural": {
+    "message": "$COUNT$ comentários pendentes",
+    "description": "Status badge label for multiple comments awaiting moderation",
+    "placeholders": {
+      "count": { "content": "$1" }
+    }
+  },
+
+  "edit_category": {
+    "message": "Editar categoria",
+    "description": "Edit action label when viewing a category archive"
+  },
+  "edit_tag": {
+    "message": "Editar tag",
+    "description": "Edit action label when viewing a tag archive"
+  },
+  "edit_term": {
+    "message": "Editar termo",
+    "description": "Edit action label when viewing a taxonomy term archive"
+  },
+  "edit_author": {
+    "message": "Editar autor",
+    "description": "Edit action label when viewing an author archive"
+  },
+  "edit_page_fallback": {
+    "message": "Editar página",
+    "description": "Fallback edit action label when the post type cannot be determined"
+  },
+  "edit_term_not_resolvable": {
+    "message": "Editar termo (não resolvível)",
+    "description": "Disabled edit action label when the term cannot be resolved to an edit URL"
+  },
+  "edit_author_not_resolvable": {
+    "message": "Editar autor (não resolvível)",
+    "description": "Disabled edit action label when the author cannot be resolved to an edit URL"
+  },
+  "nothing_to_edit": {
+    "message": "Nada para editar",
+    "description": "Disabled edit action label for pages with no editable content (e.g. search results, 404)"
+  },
+  "edit_post_type": {
+    "message": "Editar $TYPE$",
+    "description": "Edit action label prefixed with the post type name (e.g. 'Edit Post', 'Edit Page')",
+    "placeholders": {
+      "type": { "content": "$1" }
+    }
+  },
+
+  "post_type_post": {
+    "message": "Postagem",
+    "description": "Display name for the 'post' post type"
+  },
+  "post_type_page": {
+    "message": "Página",
+    "description": "Display name for the 'page' post type"
+  },
+  "post_type_media": {
+    "message": "Mídia",
+    "description": "Display name for the 'attachment' post type"
+  },
+  "post_type_block_pattern": {
+    "message": "Padrão de bloco",
+    "description": "Display name for the 'wp_block' post type (reusable blocks)"
+  },
+  "post_type_template": {
+    "message": "Modelo",
+    "description": "Display name for the 'wp_template' post type"
+  },
+  "post_type_template_part": {
+    "message": "Parte de modelo",
+    "description": "Display name for the 'wp_template_part' post type"
+  },
+  "post_type_navigation_menu": {
+    "message": "Menu de navegação",
+    "description": "Display name for the 'wp_navigation' post type"
+  },
+  "my_sites_label": {
+    "message": "Meus Sites",
+    "description": "Header for the saved-sites launcher section"
+  },
+  "my_sites_edit": {
+    "message": "Editar",
+    "description": "Toggle that reveals rename/remove controls in the My Sites list"
+  },
+  "my_sites_done": {
+    "message": "Concluído",
+    "description": "Toggle that exits edit mode in the My Sites list"
+  },
+  "my_sites_remove": {
+    "message": "Remover site",
+    "description": "Button that removes a site from the My Sites list"
+  },
+  "my_sites_rename_placeholder": {
+    "message": "Nome personalizado",
+    "description": "Placeholder/label for the rename field in the My Sites list"
+  },
+  "host_local_dev": {
+    "message": "Desenvolvimento local",
+    "description": "Host badge label for a local development environment (the other host labels are brand names and are not translated)"
+  },
+  "edit_blog_template": {
+    "message": "Editar modelo do blog",
+    "description": "Edit action label on the blog posts index (block theme) — opens the site editor"
+  },
+  "edit_archive_template": {
+    "message": "Editar modelo de arquivo",
+    "description": "Edit action label on an archive view (block theme) — opens the site editor"
+  },
+  "edit_unavailable_classic": {
+    "message": "Edição indisponível (tema clássico)",
+    "description": "Disabled edit label on a template-backed view when the theme is classic (templates are PHP files)"
+  },
+  "edit_template_not_found": {
+    "message": "Modelo não encontrado",
+    "description": "Disabled edit label when the block theme has no template matching the current view"
+  },
+  "edit_unavailable": {
+    "message": "Edição indisponível",
+    "description": "Disabled edit label on a template-backed view when block-theme status can't be determined"
+  }
+}
